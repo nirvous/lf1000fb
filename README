@@ -1,7 +1,8 @@
 Framebuffer support for the LF1000/Pollux SoC.
 
 This is a modified version of the nonfunctional file drivers/video/lf1000fb.c 
-from the LF 2.6.31 source tree, enabled for Didj and Leapster Explorer by nirvous.
+from the LF 2.6.31 source tree (LF-Linux-6905-20100610-0915) 
+enabled for Didj and Leapster Explorer by nirvous.
 
 Greetz and many thanks to zucchini for his valuable help and input, 
 as well as to Claude, GrizzlyAdams, jburks, jkent, losinggeneration, 
