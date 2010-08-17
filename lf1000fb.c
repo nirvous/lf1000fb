@@ -281,16 +281,9 @@ static int lf1000fb_setcolreg(unsigned regno,
 	return 0;
 }
 
-int have_tvout(void)
-{
-#ifdef DUAL_DISPLAY		
-	return(1);
-#else
-	return(0);
-#endif
-}
 
 
+//normally in drivers/lf1000/mlc_hal.h
 
 #define MLCCONTROLT             0x00
 #define MLCSCREENSIZE		    0x04
@@ -324,6 +317,22 @@ int have_tvout(void)
 #define MLCTPCOLOR1				0x64
 #define MLCTPCOLOR0				0x30
 
+#define MLCINVCOLOR0			0x24
+#define MLCINVCOLOR1			0x44
+#define MLCINVCOLOR2			0x64
+
+#define MLCHSCALE				0x9C
+#define MLCVSCALE				0xA0
+
+
+#define MLCLEFTRIGHT0_0			0x14
+#define MLCLEFTRIGHT1_0			0x48
+
+#define MLCTOPBOTTOM0_0			0x18
+#define MLCTOPBOTTOM1_0			0x4C
+
+#define MLCADDRESSCB			0x8C
+#define MLCADDRESSCR			0x90
 
 /* MLC RGB Layer n Control Register (MLCCONTROLn) */
 #define GRP3DENB                8       /* set layer as output of 3D core */
@@ -359,6 +368,30 @@ int have_tvout(void)
 /* MLC RGB LAYER n TRANSPARENCY COLOR REGISTER (MLCTPCOLORn) */
 #define ALPHA			28
 #define TPCOLOR			0
+
+/* MLC RGB LAYER n INVERSION COLOR REGISTER (MLCINVCOLORn) */
+#define INVCOLOR		0
+
+/* MLC Video layer Horizontal Scale (MLCHSCALE) Register */
+
+#define HFILTERENB		28 /* bilinear filter enable */
+#define HSCALE			0  /* horizonal scale ratio */
+
+/* MLC Video layer Vertical Scale (MLCVSCALE) Register */
+
+#define VFILTERENB		28 /* bilinear filter enable */
+#define VSCALE			0  /* vertical scale ratio */
+
+
+/* MLC RGB Layer n Invalid Area 0 left right register (MLCLEFTRIGHT0_0) */
+#define INVALIDENB		28
+#define INVALIDLEFT		16
+#define INVALIDRIGHT		0
+
+/* MLC RGB Layer n Invalid Area 0 Top Bottom Register */
+#define INVALIDTOP		16
+#define INVALIDBOTTOM		0
+
 
 //enum {
 //	VID_PRIORITY_FIRST	= 0,   /* video  > Cursor > Window > 3D */
@@ -448,6 +481,12 @@ union mlc_cmd {
 	struct overlaysize_cmd overlaysize;
 };
 
+//normally in arch/arm/lf1000/mach/mlc.h
+int mlc_GetAddressCb(u8 layer, int *addr);
+int mlc_GetAddressCr(u8 layer, int *addr);
+
+
+//normally in include/linux/lf1000
 #define MLC_IOC_MAGIC   'm'
 #define MLC_IOCTENABLE		_IO(MLC_IOC_MAGIC,  0)
 #define MLC_IOCTBACKGND		_IO(MLC_IOC_MAGIC,  1)
@@ -486,11 +525,41 @@ union mlc_cmd {
 #define MLC_IOCTALPHA		_IO(MLC_IOC_MAGIC,  19)
 #define MLC_IOCQALPHA		_IO(MLC_IOC_MAGIC,  28)
 #define MLC_IOCTTPCOLOR		_IO(MLC_IOC_MAGIC,  20)
-#define MLC_IOCQTPCOLOR		_IO(MLC_IOC_MAGIC,  40)
+#define MLC_IOCQTPCOLOR		_IO(MLC_IOC_MAGIC,  40) //PATCH
 #define MLC_IOCTBLEND		_IO(MLC_IOC_MAGIC,  21)
-#define MLC_IOCQBLEND		_IO(MLC_IOC_MAGIC,  41)
+#define MLC_IOCQBLEND		_IO(MLC_IOC_MAGIC,  41) //PATCH
 #define MLC_IOCTTRANSP		_IO(MLC_IOC_MAGIC,  22)
-#define MLC_IOCQTRANSP		_IO(MLC_IOC_MAGIC,  42)
+#define MLC_IOCQTRANSP		_IO(MLC_IOC_MAGIC,  42) //PATCH
+
+#define MLC_IOCTINVERT		_IO(MLC_IOC_MAGIC,  23)
+#define MLC_IOCQINVERT		_IO(MLC_IOC_MAGIC,  43) //PATCH
+
+#define MLC_IOCTINVCOLOR	_IO(MLC_IOC_MAGIC,  24)
+#define MLC_IOCQINVCOLOR	_IO(MLC_IOC_MAGIC,  44)  //PATCH
+
+#define MLC_IOCSOVERLAYSIZE	_IOW(MLC_IOC_MAGIC, 30, struct overlaysize_cmd *)
+#define MLC_IOCGOVERLAYSIZE	_IOR(MLC_IOC_MAGIC, 31, struct overlaysize_cmd *)
+#define MLC_IOCTINVISIBLE	_IO(MLC_IOC_MAGIC,  34)
+#define MLC_IOCQINVISIBLE	_IO(MLC_IOC_MAGIC,  35)
+
+#define MLC_IOCSINVISIBLEAREA	_IOW(MLC_IOC_MAGIC, 36, struct position_cmd *)
+#define MLC_IOCGINVISIBLEAREA	_IOR(MLC_IOC_MAGIC, 37, struct position_cmd *)
+
+#define MLC_IOCTADDRESSCB	_IO(MLC_IOC_MAGIC,  38)
+#define MLC_IOCQADDRESSCB	_IO(MLC_IOC_MAGIC,  45) //PATCH
+
+#define MLC_IOCTADDRESSCR	_IO(MLC_IOC_MAGIC,  39)
+#define MLC_IOCQADDRESSCR	_IO(MLC_IOC_MAGIC,  46) //PATCH
+
+
+int have_tvout(void)
+{
+#ifdef DUAL_DISPLAY		
+	return(1);
+#else
+	return(0);
+#endif
+}
 
 //int mlc_layer_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,unsigned long arg)
 //static int pollux_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
@@ -762,7 +831,122 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 			return -EFAULT;
 		break;
 		
+		case MLC_IOCTINVERT:
+		result = mlc_SetInvertEnable(layerID, arg);
+		if (have_tvout()) {
+			memregs += 0x400;
+			result = mlc_SetInvertEnable(layerID, arg);
+			memregs -= 0x400;
+		}
+		break;
 		
+		case MLC_IOCQINVERT:
+		if(mlc_GetInvertEnable(layerID, &result) < 0);
+			return -EFAULT;
+		break;
+		
+		case MLC_IOCTINVCOLOR:
+		result = mlc_SetInvertColor(layerID, arg);
+		if (have_tvout()) {
+			memregs += 0x400;
+			result = mlc_SetInvertColor(layerID, arg);
+			memregs -= 0x400;
+		}
+		
+		case MLC_IOCQINVCOLOR:
+		if(mlc_GetInvertColor(layerID, &result) < 0);
+			return -EFAULT;
+		break;
+		
+		case MLC_IOCSOVERLAYSIZE:
+		if(!(_IOC_DIR(cmd) & _IOC_WRITE))
+			return -EFAULT;
+		if(copy_from_user((void *)&c, argp, 
+				  sizeof(struct overlaysize_cmd)))
+			return -EFAULT;
+		result = mlc_SetOverlaySize(layerID,
+					    c.overlaysize.srcwidth,
+					    c.overlaysize.srcheight,
+					    c.overlaysize.dstwidth,
+					    c.overlaysize.dstheight);
+		if (have_tvout()) {
+			memregs += 0x400;
+			result = mlc_SetOverlaySize(layerID,
+						    c.overlaysize.srcwidth,
+						    c.overlaysize.srcheight,
+						    c.overlaysize.dstwidth,
+						    c.overlaysize.dstheight);
+			memregs -= 0x400;
+		}
+		break;
+		
+		case MLC_IOCGOVERLAYSIZE:
+		if(!(_IOC_DIR(cmd) & _IOC_READ))
+			return -EFAULT;
+		result = mlc_GetOverlaySize(layerID, 
+					    (struct mlc_overlay_size *)&c);
+		if(result < 0)
+			return result;
+		if(copy_to_user(argp, (void *)&c, 
+				sizeof(struct overlaysize_cmd)))
+			return -EFAULT;
+		break;
+		
+		
+		case MLC_IOCTINVISIBLE:
+		result = mlc_SetLayerInvisibleAreaEnable(layerID, arg);
+		break;
+		
+		case MLC_IOCQINVISIBLE:
+		result = mlc_GetLayerInvisibleAreaEnable(layerID);
+		break;
+
+		case MLC_IOCSINVISIBLEAREA:
+		if(!(_IOC_DIR(cmd) & _IOC_WRITE))
+			return -EFAULT;
+		if(copy_from_user((void *)&c, argp, 
+				  sizeof(struct position_cmd)))
+			return -EFAULT;
+		result = mlc_SetLayerInvisibleArea(layerID,
+						   c.position.top,
+					  	   c.position.left,
+					  	   c.position.right,
+					  	   c.position.bottom);
+		break;
+		
+		case MLC_IOCGINVISIBLEAREA:
+		if(!(_IOC_DIR(cmd) & _IOC_READ))
+			return -EFAULT;
+		result = mlc_GetLayerInvisibleArea(layerID, 
+					(struct mlc_layer_position *)&c);
+		if(result < 0)
+			return result;
+		if(copy_to_user(argp, (void *)&c, sizeof(struct position_cmd)))
+			return -EFAULT;
+		break;
+		
+		
+		case MLC_IOCTADDRESSCB:
+		result = mlc_SetAddressCb(layerID, arg);
+		if (have_tvout()) {
+			memregs += 0x400;
+			result = mlc_SetAddressCb(layerID, arg);
+			memregs -= 0x400;
+		}
+		break;
+		
+
+		
+		case MLC_IOCTADDRESSCR:
+		result = mlc_SetAddressCr(layerID, arg);
+		if (have_tvout()) {
+			memregs += 0x400;
+			result = mlc_SetAddressCr(layerID, arg);
+			memregs -= 0x400;
+		}
+		break;
+		
+
 		case MLC_IOCTDIRTY:
 		result = mlc_SetDirtyFlag(layerID);
 		if (have_tvout()) {
@@ -783,7 +967,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		}
 		break;
 		
-		
+
 		case MLC_IOCQHSTRIDE:
 		result = mlc_GetHStride(layerID);
 		break;
@@ -792,7 +976,17 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		if(mlc_GetAddress(layerID, &result) < 0)
 		return -EFAULT;
 		break;
+
+		case MLC_IOCQADDRESSCR:
+		if(mlc_GetAddressCr(layerID, &result) < 0)
+		return -EFAULT;
+		break;
 		
+		case MLC_IOCQADDRESSCB:
+		if(mlc_GetAddressCb(layerID, &result) < 0)
+		return -EFAULT;
+		break;
+				
 
 		case MLC_IOCQFBSIZE:
 		if (layerID > MLC_NUM_LAYERS)
@@ -800,7 +994,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		result = mlc_fb_size;
 		break;
 		
-		
+
 
 		default:
 		return -ENOTTY;
@@ -909,6 +1103,29 @@ int mlc_GetAddress(u8 layer, int *addr) /* FIXME */
 	return 0;
 }
 
+
+int mlc_GetAddressCb(u8 layer, int *addr)
+{
+	void *reg = NULL;
+	if(layer > MLC_NUM_LAYERS || layer != MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	reg = memregs+MLCADDRESSCB;
+	*addr = ioread32(reg);
+	return 0;
+}
+
+int mlc_GetAddressCr(u8 layer, int *addr)
+{
+	void *reg = NULL;
+	
+	if(layer > MLC_NUM_LAYERS || layer != MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	reg = memregs+MLCADDRESSCR;
+	*addr = ioread32(reg);
+	return 0;
+}
 
 
 int mlc_SetAddress(u8 layer, u32 addr)
@@ -1395,6 +1612,277 @@ int mlc_GetTransparencyEnable(u8 layer, int *en)
 	*en = IS_SET(tmp,TPENB) ? 1 : 0;
 	return 0;
 }
+
+
+int mlc_SetInvertEnable(u8 layer, u8 en)
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER) 
+		return -EINVAL;
+
+	reg = SelectLayerControl(layer);
+
+	tmp = ioread32(reg);
+	en ? BIT_SET(tmp,INVENB) : BIT_CLR(tmp,INVENB);
+	iowrite32(tmp,reg);
+	return 0;
+}
+
+int mlc_GetInvertEnable(u8 layer, int *en)
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	reg = SelectLayerControl(layer);
+
+	tmp = ioread32(reg);
+	*en = IS_SET(tmp,INVENB) ? 1 : 0;
+	return 0;
+}
+
+int mlc_SetInvertColor(u8 layer, u32 color)
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	//reg = mlc.mem+MLCINVCOLOR0+layer*0x34;
+		switch(layer) {
+		case 0:
+		reg = memregs+MLCINVCOLOR0;
+		break;
+		case 1:
+		reg = memregs+MLCINVCOLOR1;
+		break;
+		case 2:
+		reg = memregs+MLCINVCOLOR2; 
+		break;
+	}
+	
+	tmp = ioread32(reg);
+	tmp &= ~(0xFFFFFF<<INVCOLOR);
+	tmp |= ((0xFFFFFF & color)<<INVCOLOR);
+	iowrite32(tmp,reg);
+	return 0;
+}
+
+
+int mlc_GetInvertColor(u8 layer, int *color)
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	//reg = mlc.mem+MLCINVCOLOR0+layer*0x34;
+	switch(layer) {
+		case 0:
+		reg = memregs+MLCINVCOLOR0;
+		break;
+		case 1:
+		reg = memregs+MLCINVCOLOR1;
+		break;
+		case 2:
+		reg = memregs+MLCINVCOLOR2; 
+		break;
+	}
+
+	tmp = ioread32(reg);
+	*color = ((tmp & (0xFFFFFF<<INVCOLOR))>>INVCOLOR);
+	return 0;
+}
+
+
+int mlc_SetOverlaySize(u8 layer, u32 srcwidth, u32 srcheight, u32 dstwidth, 
+		u32 dstheight)
+{
+	/* Enable adjusted ratio with bilinear filter for upscaling */
+	if (srcwidth < dstwidth)
+		iowrite32((1<<28) | (((srcwidth-1)<<11)/(dstwidth-1)), memregs+MLCHSCALE);
+	else
+		iowrite32((srcwidth<<11)/(dstwidth), memregs+MLCHSCALE);
+	/* Ditto for height which scales independently of width */
+	if (srcheight < dstheight)	
+		iowrite32((1<<28) | (((srcheight-1)<<11)/(dstheight-1)), memregs+MLCVSCALE);
+	else
+		iowrite32((srcheight<<11)/(dstheight), memregs+MLCVSCALE);
+	return 0;
+}
+
+int mlc_GetOverlaySize(u8 layer, struct mlc_overlay_size *psize)
+{
+	u32 hscale = ioread32(memregs+MLCHSCALE);
+	u32 vscale = ioread32(memregs+MLCVSCALE);
+
+	psize->srcwidth = (hscale>>11) & 0x7FF;
+	psize->srcheight = hscale & 0x7FF;
+	psize->dstwidth = (vscale>>11) & 0x7FF;
+	psize->dstheight = vscale & 0x7FF;
+
+	return 0;
+}
+
+int mlc_SetLayerInvisibleAreaEnable(u8 layer, u8 en) /***********************VALIDATE?*/
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+		
+	switch(layer) {
+		case 0:
+		reg = memregs+MLCLEFTRIGHT0_0;
+		break;
+		case 1:
+		reg = memregs+MLCLEFTRIGHT1_0;
+		break;
+	}
+
+	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	tmp = ioread32(reg);
+	en ? BIT_SET(tmp, INVALIDENB) : BIT_CLR(tmp, INVALIDENB);
+	iowrite32(tmp, reg);
+
+	return 0;
+}
+
+int mlc_GetLayerInvisibleAreaEnable(u8 layer) /***********************VALIDATE?*/
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	
+	switch(layer) {
+		case 0:
+		reg = memregs+MLCLEFTRIGHT0_0;
+		break;
+		case 1:
+		reg = memregs+MLCLEFTRIGHT1_0;
+		break;
+	}
+	tmp = ioread32(reg);
+
+	return IS_SET(tmp, INVALIDENB) ? 1 : 0;
+}
+
+int mlc_SetLayerInvisibleArea(u8 layer, s32 top, s32 left, s32 right, s32 bottom)
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	top &= 0x7FF;
+	left &= 0x7FF;
+	right &= 0x7FF;
+	bottom &= 0x7FF;
+
+	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	
+	switch(layer) {
+		case 0:
+		reg = memregs+MLCLEFTRIGHT0_0;
+		break;
+		case 1:
+		reg = memregs+MLCLEFTRIGHT1_0;
+		break;
+	}
+	tmp = ioread32(reg);
+	tmp &= ~((0x7FF<<INVALIDLEFT)|(0x7FF<<INVALIDRIGHT));
+	tmp |= (left<<INVALIDLEFT)|(right<<INVALIDRIGHT);
+	iowrite32(tmp, reg);
+
+	//reg = memregs+MLCTOPBOTTOM0_0+layer*0x34;
+	switch(layer) {
+		case 0:
+		reg = memregs+MLCTOPBOTTOM0_0;
+		break;
+		case 1:
+		reg = memregs+MLCTOPBOTTOM1_0;
+		break;
+	}
+	
+	tmp = ioread32(reg);
+	tmp &= ~((0x7FF<<INVALIDTOP)|(0x7FF<<INVALIDBOTTOM));
+	tmp |= (left<<INVALIDTOP)|(right<<INVALIDBOTTOM);
+	iowrite32(tmp, reg);
+
+	return 0;
+}
+
+
+int mlc_GetLayerInvisibleArea(u8 layer, struct mlc_layer_position *p)
+{
+	u32 tmp;
+
+	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
+		return -EINVAL;
+
+	//tmp = ioread32(mlc.mem+MLCLEFTRIGHT0_0+0x34*layer);
+	
+	switch(layer) {
+		case 0:
+		tmp = memregs+MLCLEFTRIGHT0_0;
+		break;
+		case 1:
+		tmp = memregs+MLCLEFTRIGHT1_0;
+		break;
+	}
+	p->left = ((tmp & (0x7FF<<LEFT))>>LEFT);
+	p->right  = ((tmp & (0x7FF<<RIGHT))>>RIGHT);
+
+	//tmp = ioread32(mlc.mem+MLCTOPBOTTOM0_0+0x34*layer);
+	switch(layer) {
+		case 0:
+		tmp = memregs+MLCTOPBOTTOM0_0;
+		break;
+		case 1:
+		tmp = memregs+MLCTOPBOTTOM1_0;
+		break;
+	}
+	p->top  = ((tmp & (0x7FF<<TOP))>>TOP);
+	p->bottom = ((tmp & (0x7FF<<BOTTOM))>>BOTTOM);
+
+	return 0;
+}
+
+
+int mlc_SetAddressCb(u8 layer, u32 addr)
+{
+	if (layer != MLC_VIDEO_LAYER) 
+		return -EINVAL;
+	iowrite32(addr, memregs+MLCADDRESSCB);
+	return 0;
+}
+
+
+
+
+int mlc_SetAddressCr(u8 layer, u32 addr)
+{
+	if (layer != MLC_VIDEO_LAYER) 
+		return -EINVAL;
+	iowrite32(addr, memregs+MLCADDRESSCR);
+	return 0;
+}
+
+
+
+
 
 
 /*
