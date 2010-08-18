@@ -63,7 +63,7 @@
 #define BYTESPP				2
 #define BITSPP				BYTESPP*8
 #define VISUALTYPE			FB_VISUAL_TRUECOLOR //FB_VISUAL_PSEUDOCOLOR, FB_VISUAL_TRUECOLOR
-#define FORMATCODE			0x4432
+//#define FORMATCODE			0x4432
 
 /* Formats:
  * 	RGB565		= 0x4432, 
@@ -135,84 +135,10 @@ struct lf1000fb_info {
 
 	int pseudo_pal[16];
 	int palette_buf[256];
+	int                     pix_fmt;
 };
-
-
-/*
- * Configure the MLC - we dont know what mode we are inheriting... 
- *
-*/
-
 static void *memregs;
-static void set_mlc(struct platform_device *pdev)
-{
-	u32 reg;
-	u32 hstride;
-	u32 vstride;
-	u32 bgcolor;
-	u32 dirtyflag;
-	u32 enable;
-	u16 currentformat;
-	u16 newformat;
 
-	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		printk(KERN_INFO "lf1000fb: **************can't get resource\n");
-	}
-	
-	if (!request_mem_region(res->start, (res->end - res->start+1), "lf1000-fb")) {
-		printk(KERN_INFO  "lf1000fb: *************can't request memory\n");
-	}
-	
-	memregs = ioremap_nocache(res->start, (res->end - res->start+1));
-	if(!memregs) {
-		printk(KERN_INFO "lf1000fb: **************can't remap memory\n");
-	}
-	
-	enable = ioread32(memregs+MLCCONTROL0);						/*Read the register*/
-	iowrite32(enable | (1<<LAYERENB), memregs+MLCCONTROL0);		/*Enable Layer*/
-	enable = ioread32(memregs+MLCCONTROL1);						/*Read the register*/
-	iowrite32(enable | (1<<LAYERENB), memregs+MLCCONTROL1);		/*Enable Layer*/
-	
-	printk(KERN_INFO "lf1000fb: Current MLC0 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
-	printk(KERN_INFO "lf1000fb: Current MLC1 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL1)>>FORMAT) & 0xFFFF);
-
-	reg=ioread32(memregs+MLCCONTROL0) & ~(0xFFFF<<FORMAT);
-	iowrite32(reg | (FORMATCODE<<FORMAT), memregs+MLCCONTROL0); /*Write the format */
-	reg=ioread32(memregs+MLCCONTROL1) & ~(0xFFFF<<FORMAT);
-	iowrite32(reg | (FORMATCODE<<FORMAT), memregs+MLCCONTROL1); /*Write the format */
-	
-	printk(KERN_INFO "lf1000fb: New MLC0 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
-	printk(KERN_INFO "lf1000fb: New MLC1 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL1)>>FORMAT) & 0xFFFF);
-
-		
-	hstride = BYTESPP;	
-	hstride &= 0x7FFFFFFF;						
-	iowrite32(hstride, memregs + MLCHSTRIDE0);
-	iowrite32(hstride, memregs + MLCHSTRIDE1);
-
-	printk(KERN_INFO "lf1000fb: New MLC0 HStride: %d\n", (ioread32(memregs + MLCHSTRIDE0)));
-	printk(KERN_INFO "lf1000fb: New MLC1 HStride: %d\n", (ioread32(memregs + MLCHSTRIDE1)));
-
-	
-	vstride = hstride*X_RESOLUTION;
-	iowrite32(vstride, memregs + MLCVSTRIDE0);
-	iowrite32(vstride, memregs + MLCVSTRIDE1);
-
-	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(memregs + MLCVSTRIDE0)));
-	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(memregs + MLCVSTRIDE1)));
-
-
-	dirtyflag = ioread32(memregs+MLCCONTROL0);						/*Read the register*/
-	iowrite32(dirtyflag | (1<<DIRTYFLAG), memregs+MLCCONTROL0);		/*Set dirty*/
-	dirtyflag = ioread32(memregs+MLCCONTROL1);						/*Read the register*/
-	iowrite32(dirtyflag | (1<<DIRTYFLAG), memregs+MLCCONTROL1);		/*Set dirty*/
-
-}
-
-/*
- * framebuffer interface 
- */
 
 static void schedule_palette_update(struct lf1000fb_info *fbi,
 		unsigned int regno, unsigned int val)
@@ -1885,9 +1811,126 @@ int mlc_SetAddressCr(u8 layer, u32 addr)
 
 
 
-/*
- * platform device
- */
+static void set_mode(struct lf1000fb_info *fbi)
+{
+	/*Set Mode*/
+	/* we have a static mode: 320x240, 16-bit */
+
+	fbi->fb.var.xres		= X_RESOLUTION;
+	fbi->fb.var.yres		= Y_RESOLUTION;
+	fbi->fb.var.xres_virtual	= fbi->fb.var.xres;
+	fbi->fb.var.yres_virtual	= fbi->fb.var.yres;
+	fbi->fb.var.xoffset		= 0;
+	fbi->fb.var.yoffset		= 0;
+
+	switch(fbi->fb.var.bits_per_pixel) {
+		case 8:
+		/*565 - 8 bits*/
+			
+			fbi->fb.var.red.offset		= 0;
+			fbi->fb.var.red.length		= 8;
+			fbi->fb.var.green.offset	= 0;
+			fbi->fb.var.green.length	= 8;
+			fbi->fb.var.blue.offset		= 0;
+			fbi->fb.var.blue.length		= 8;
+			fbi->fb.var.transp.offset	= 0;
+			fbi->fb.var.transp.length	= 0;
+			fbi->pix_fmt				= 0x443A;
+			break;
+		case 16:
+		/*565 - 16 bits*/
+			
+			fbi->fb.var.red.offset		= 5;//was 11
+			fbi->fb.var.red.length		= 5;
+			fbi->fb.var.green.offset	= 5;
+			fbi->fb.var.green.length	= 6;
+			fbi->fb.var.blue.offset		= 0;
+			fbi->fb.var.blue.length		= 5;
+			fbi->fb.var.transp.offset	= 0;
+			fbi->fb.var.transp.length	= 0;
+			fbi->pix_fmt				= 0x4432;
+			break;
+		case 24:
+		/*888 24bits*/
+			
+			fbi->fb.var.red.offset		= 0;//0 for bgr. 16 for rgb
+			fbi->fb.var.red.length		= 8;
+			fbi->fb.var.green.offset	= 8;
+			fbi->fb.var.green.length	= 8;
+			fbi->fb.var.blue.offset		= 16;//16 for bgr. 0 for rgb
+			fbi->fb.var.blue.length		= 8;
+			fbi->fb.var.transp.offset	= 0;
+			fbi->fb.var.transp.length	= 0;
+			fbi->pix_fmt				= 0x4653;
+			break;
+		case 32:
+		/* 8888 32bits*/
+			
+			fbi->fb.var.red.offset		= 16;
+			fbi->fb.var.red.length		= 8;
+			fbi->fb.var.green.offset	= 8;
+			fbi->fb.var.green.length	= 8;
+			fbi->fb.var.blue.offset		= 0;
+			fbi->fb.var.blue.length		= 8;
+			fbi->fb.var.transp.offset	= 0;
+			fbi->fb.var.transp.length	= 0;
+			fbi->pix_fmt				= 0x8653;
+			break;
+		default:
+		return -EINVAL;
+	}
+		fbi->fb.var.vmode		= FB_VMODE_NONINTERLACED;
+}
+
+
+static void lf1000fb_set_par(struct lf1000fb_info *fbi)
+{
+	set_mode(fbi);
+	u32 hstride;
+	u32 vstride;
+
+	mlc_SetLayerEnable(0, 1);
+	if (have_tvout()) {
+		memregs+= 0x400;
+		mlc_SetLayerEnable(0,1);
+		memregs -= 0x400;
+	}
+
+	mlc_SetFormat(0, fbi->pix_fmt);
+	if (have_tvout()) {
+		memregs+= 0x400;
+		mlc_SetFormat(0, fbi->pix_fmt);
+		memregs -= 0x400;
+	}
+	printk(KERN_INFO "lf1000fb: New MLC0 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
+
+
+	hstride = fbi->fb.var.bits_per_pixel/8;
+	mlc_SetHStride(0, hstride);
+	if (have_tvout()) {
+		memregs+= 0x400;
+		mlc_SetHStride(0, hstride);
+		memregs -= 0x400;
+	}
+	printk(KERN_INFO "lf1000fb: New MLC0 HStride: %d\n", (ioread32(memregs + MLCHSTRIDE0)));
+
+	vstride = hstride*fbi->fb.var.xres;
+	mlc_SetVStride(0, vstride);
+	if (have_tvout()) {
+		memregs += 0x400;
+		mlc_SetVStride(0, vstride);
+		memregs -= 0x400;
+	}
+	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(memregs + MLCVSTRIDE0)));
+
+	mlc_SetDirtyFlag(0);
+	if (have_tvout()) {
+			memregs += 0x400;
+			mlc_SetDirtyFlag(0);
+			memregs -= 0x400;
+	};
+}
+
 
 struct fb_ops lf1000fb_ops = {
 	.owner		= THIS_MODULE,
@@ -1896,10 +1939,8 @@ struct fb_ops lf1000fb_ops = {
 	.fb_copyarea	= cfb_copyarea,
 	.fb_imageblit	= cfb_imageblit,
 	.fb_ioctl	= lf1000fb_ioctl,
+	.fb_set_par	= lf1000fb_set_par,
 };
-
-
-
 
 static int __init lf1000fb_probe(struct platform_device *pdev)
 {
@@ -1907,7 +1948,21 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 	int ret = 0;
 	//printk(KERN_INFO "%u\n", (unsigned int)&pdev->dev);
 	printk(KERN_INFO "lf1000fb: loading\n");
-
+	
+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		printk(KERN_INFO "lf1000fb: **************can't get resource\n");
+	}
+	
+	if (!request_mem_region(res->start, (res->end - res->start+1), "lf1000-fb")) {
+		printk(KERN_INFO  "lf1000fb: *************can't request memory\n");
+	}
+	
+	
+	
+/*
+ * Allocate framebuffer memory.
+ */
 	fbi = framebuffer_alloc(sizeof(struct lf1000fb_info), &pdev->dev);
 	printk(KERN_INFO "lf1000fb: alloc done\n");
 	if(fbi == NULL) {
@@ -1924,91 +1979,53 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto fail_fbmem;
 	}
+	fbi->fb.screen_size		= mlc_fb_size;
+	fbi->fb.screen_base		= fbi->fbmem;
+	
+	/*Map MLC registers*/
 
-	/* configure framebuffer */
-	printk(KERN_INFO "Configure Framebuffer\n");
+	
+	memregs = ioremap_nocache(res->start, (res->end - res->start+1));
+	if(!memregs) {
+		printk(KERN_INFO "lf1000fb: **************can't remap memory\n");
+	}
+	
+/* configure framebuffer fixed params */
+	printk(KERN_INFO "Configure Framebuffer fixed params\n");
 	fbi->fb.fix = lf1000fb_fix;
 
-	/* we have a static mode: 320x240, 32-bit */
 
-	fbi->fb.var.xres		= X_RESOLUTION;
-	fbi->fb.var.yres		= Y_RESOLUTION;
-	fbi->fb.var.xres_virtual	= fbi->fb.var.xres;
-	fbi->fb.var.yres_virtual	= fbi->fb.var.yres;
-	fbi->fb.var.xoffset		= 0;
-	fbi->fb.var.yoffset		= 0;
+	fbi->fb.var.bits_per_pixel=BITSPP;
+	//Do check var here
 
-	switch(BYTESPP) {
-		case 1:
-		/*565 - 8 bits*/
-			fbi->fb.var.bits_per_pixel	= BITSPP;
-			fbi->fb.var.red.offset		= 0;
-			fbi->fb.var.red.length		= 8;
-			fbi->fb.var.green.offset	= 0;
-			fbi->fb.var.green.length	= 8;
-			fbi->fb.var.blue.offset		= 0;
-			fbi->fb.var.blue.length		= 8;
-			fbi->fb.var.transp.offset	= 0;
-			fbi->fb.var.transp.length	= 0;
-			break;
-		case 2:
-		/*565 - 16 bits*/
-			fbi->fb.var.bits_per_pixel	= BITSPP;
-			fbi->fb.var.red.offset		= 5;//was 11
-			fbi->fb.var.red.length		= 5;
-			fbi->fb.var.green.offset	= 5;
-			fbi->fb.var.green.length	= 6;
-			fbi->fb.var.blue.offset		= 0;
-			fbi->fb.var.blue.length		= 5;
-			fbi->fb.var.transp.offset	= 0;
-			fbi->fb.var.transp.length	= 0;
-			break;
-		case 3:
-		/*888 24bits*/
-			fbi->fb.var.bits_per_pixel	= BITSPP;
-			fbi->fb.var.red.offset		= 0;//0 for bgr. 16 for rgb
-			fbi->fb.var.red.length		= 8;
-			fbi->fb.var.green.offset	= 8;
-			fbi->fb.var.green.length	= 8;
-			fbi->fb.var.blue.offset		= 16;//16 for bgr. 0 for rgb
-			fbi->fb.var.blue.length		= 8;
-			fbi->fb.var.transp.offset	= 0;
-			fbi->fb.var.transp.length	= 0;
-			break;
-		case 4:
-		/* 8888 32bits*/
-			fbi->fb.var.bits_per_pixel	= BITSPP;
-			fbi->fb.var.red.offset		= 16;
-			fbi->fb.var.red.length		= 8;
-			fbi->fb.var.green.offset	= 8;
-			fbi->fb.var.green.length	= 8;
-			fbi->fb.var.blue.offset		= 0;
-			fbi->fb.var.blue.length		= 8;
-			fbi->fb.var.transp.offset	= 0;
-			fbi->fb.var.transp.length	= 0;
-			break;
-	}
-	set_mlc(pdev);
+	/*Set Mode*/
+	/*Set MLC*/
+	lf1000fb_set_par(fbi);
 
+
+	
+/*
+ * Initialise other static fb parameters.
+ */
+	fbi->fb.flags			= FBINFO_DEFAULT;
+	fbi->fb.node			= -1;
 	fbi->fb.var.nonstd		= 0;
 	fbi->fb.var.activate		= FB_ACTIVATE_NOW;
 	fbi->fb.var.height		= -1;
 	fbi->fb.var.width		= -1;
-	fbi->fb.var.vmode		= FB_VMODE_NONINTERLACED;
-
 	fbi->fb.fbops			= &lf1000fb_ops;
-	fbi->fb.flags			= FBINFO_DEFAULT;
-	fbi->fb.node			= -1;
-
-	printk(KERN_INFO "lf1000fb: setting pseudopallette\n");
+	printk(KERN_INFO "lf1000fb: setting pseudopalette\n");
 	fbi->fb.pseudo_palette		= fbi->pseudo_pal;
 
-	printk(KERN_INFO "lf1000fb: fbi->pseudopallete done\n");
-	fbi->fb.screen_size		= mlc_fb_size;
-	fbi->fb.screen_base		= fbi->fbmem;
+	printk(KERN_INFO "lf1000fb: fbi->pseudopalete done\n");
+
 
 	memset(fbi->pseudo_pal, PALETTE_CLEAR, ARRAY_SIZE(fbi->pseudo_pal));
 
+
+/*
+ * Allocate color map.
+ */
 	printk(KERN_INFO "lf1000fb: fb_alloc_cmap\n");
 
 	fb_alloc_cmap(&fbi->fb.cmap, 1<<fbi->fb.var.bits_per_pixel, 0);
