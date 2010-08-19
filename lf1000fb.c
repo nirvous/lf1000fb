@@ -37,62 +37,8 @@
 #include <mach/platform.h>
 #include <mach/mlc.h>
 
-
-/*
- * Settings
- */
-#define X_RESOLUTION		320
-#define Y_RESOLUTION		240
-
-#define PALETTE_CLEAR		0x80000000
-#define MLCCONTROL0			0x24 //0x4024
-#define MLCHSTRIDE0			0x28 //0x4028
-#define MLCVSTRIDE0			0x2C //0x402C
-#define MLCCONTROL1         0x58 //0x4058
-#define MLCHSTRIDE1			0x5C //0x405C
-#define MLCVSTRIDE1			0x60 //0x4060
-
-
-#define MLCBGCOLOR			0x8 //0x4008
-#define DIRTYFLAG			4
-#define LAYERENB			5				
-#define FORMAT				16	/* see table 20-5 */
-
-
-//#define BGCOLOR				0xFFFFFF  //RGBCODE
-#define BYTESPP				2
-#define BITSPP				BYTESPP*8
-#define VISUALTYPE			FB_VISUAL_TRUECOLOR //FB_VISUAL_PSEUDOCOLOR, FB_VISUAL_TRUECOLOR
-//#define FORMATCODE			0x4432
-
-/* Formats:
- * 	RGB565		= 0x4432, 
-	BGR565		= 0xC432, 
-	XRGB1555	= 0x4342,
-	XBGR1555	= 0xC342,
-	XRGB4444	= 0x4211,
-	XBGR4444	= 0xC211,
-	XRGB8332	= 0x4120,
-	XBGR8332	= 0xC120,
-	ARGB1555	= 0x3342,
-	ABGR1555	= 0xB342,
-	ARGB4444	= 0x2211,
-	ABGR4444	= 0xA211,
-	ARGB8332	= 0x1120,
-	ABGR8332	= 0x9120,
-	RGB888		= 0x4653,
-	BGR888		= 0xC653,
-	XRGB8888	= 0x4653, 
-	XBGR8888	= 0xC653, 
-	ARGB8888	= 0x0653,
-	ABGR8888	= 0x8653,
-	PTRGB565	= 0x443A
- * */
-
-
-/* Get MLC FB address and size from mlc_fb=ADDR, SIZE kernel cmd line arg */
-static u32 mlc_fb_addr;
-static u32 mlc_fb_size;
+#include "lf1000fb.h"
+//#define DUAL_DISPLAY			1
 
 /* fixed framebuffer settings */
 static struct fb_fix_screeninfo lf1000fb_fix __initdata = {
@@ -109,6 +55,11 @@ static struct fb_fix_screeninfo lf1000fb_fix __initdata = {
 	.accel		= FB_ACCEL_NONE,
 };
 
+
+/* Get MLC FB address and size from mlc_fb=ADDR, SIZE kernel cmd line arg */
+static u32 mlc_fb_addr;
+static u32 mlc_fb_size;
+
 static int __init lf1000fb_fb_setup(char *str)
 {
 	char *s;
@@ -123,21 +74,6 @@ static int __init lf1000fb_fb_setup(char *str)
 
 __setup("mlc_fb=", lf1000fb_fb_setup);
 
-/*
- * driver private data
- */
-
-struct lf1000fb_info {
-	struct fb_info			fb;
-	struct device			*dev;
-
-	void				*fbmem;
-
-	int pseudo_pal[16];
-	int palette_buf[256];
-	int                     pix_fmt;
-};
-static void *memregs;
 
 
 static void schedule_palette_update(struct lf1000fb_info *fbi,
@@ -209,273 +145,6 @@ static int lf1000fb_setcolreg(unsigned regno,
 
 
 
-//normally in drivers/lf1000/mlc_hal.h
-
-#define MLCCONTROLT             0x00
-#define MLCSCREENSIZE		    0x04
-#define MLCADDRESS0    			0x38
-#define MLCCONTROL1				0x58
-#define MLCHSTRIDE1				0x5C
-#define MLCVSTRIDE1				0x60
-#define MLCADDRESS1				0x6C
-#define MLCCONTROL2				0x7C
-#define MLCADDRESS2     		0x8C    /* MLCADDRESS3 in databook */
-#define MLCVSTRIDE2				0x80	/* MLCVSTRIDE2 in databook */
-#define MLCSTRIDECB   		    0x98
-#define MLCSTRIDECR     		0x9C
-
-#define MLCTOPBOTTOM0			0x10
-#define MLCLEFTRIGHT0			0x0C
-#define MLCLEFTOP0				0x0C//????
-#define MLCRIGHTBOTTOM0			0x10//????
-#define MLCTOPBOTTOM1			0x44
-#define MLCLEFTRIGHT1			0x40
-#define MLCLEFTOP1				0x2C //????
-#define MLCRIGHTBOTTOM1			0x30 //????
-
-#define MLCTOPBOTTOM2			0x78
-#define MLCLEFTRIGHT2			0x74
-#define MLCLEFTOP2				0x4C //????
-#define MLCRIGHTBOTTOM2			0x50 //?????
-
-
-#define MLCTPCOLOR2				0x84 //databook error says tpcolor3
-#define MLCTPCOLOR1				0x64
-#define MLCTPCOLOR0				0x30
-
-#define MLCINVCOLOR0			0x24
-#define MLCINVCOLOR1			0x44
-#define MLCINVCOLOR2			0x64
-
-#define MLCHSCALE				0x9C
-#define MLCVSCALE				0xA0
-
-
-#define MLCLEFTRIGHT0_0			0x14
-#define MLCLEFTRIGHT1_0			0x48
-
-#define MLCTOPBOTTOM0_0			0x18
-#define MLCTOPBOTTOM1_0			0x4C
-
-#define MLCADDRESSCB			0x8C
-#define MLCADDRESSCR			0x90
-
-/* MLC RGB Layer n Control Register (MLCCONTROLn) */
-#define GRP3DENB                8       /* set layer as output of 3D core */
-#define LAYERENB                5       /* enable the layer */
-#define PALETTEPWD              15      /* layer n palette table on/off */
-#define PALETTESLD              14      /* layer n palette table sleep mode */
-#define MLC_NUM_LAYERS			3
-#define MLC_VIDEO_LAYER		(MLC_NUM_LAYERS-1)
-#define LOCKSIZE		12	/* memory read size */
-#define BLENDENB		2
-#define INVENB			1
-#define TPENB			0
-
-/* MLC TOP CONTROL REGISTER (MLCCONTROLT) */
-#define DITTYFLAG               3
-#define PIXELBUFFER_SLD         10      /* pixel buffer sleep mode */
-#define PIXELBUFFER_PWD         11      /* pixel buffer power on/off */
-#define MLCENB                  1
-#define PRIORITY		8
-
-/* MLC SCREEN SIZE REGISTER (MLCSCREENSIZE) */
-#define SCREENHEIGHT		16
-#define SCREENWIDTH		0
-
-/* MLC RGB Layer n Left Right Register (MLCLEFTRIGHTn) */
-#define LEFT			16
-#define RIGHT			0
-
-/* MLC RGB Layer n Top Bottom Register (MLCTOPBOTTOMn) */
-#define TOP			16
-#define BOTTOM			0
-
-/* MLC RGB LAYER n TRANSPARENCY COLOR REGISTER (MLCTPCOLORn) */
-#define ALPHA			28
-#define TPCOLOR			0
-
-/* MLC RGB LAYER n INVERSION COLOR REGISTER (MLCINVCOLORn) */
-#define INVCOLOR		0
-
-/* MLC Video layer Horizontal Scale (MLCHSCALE) Register */
-
-#define HFILTERENB		28 /* bilinear filter enable */
-#define HSCALE			0  /* horizonal scale ratio */
-
-/* MLC Video layer Vertical Scale (MLCVSCALE) Register */
-
-#define VFILTERENB		28 /* bilinear filter enable */
-#define VSCALE			0  /* vertical scale ratio */
-
-
-/* MLC RGB Layer n Invalid Area 0 left right register (MLCLEFTRIGHT0_0) */
-#define INVALIDENB		28
-#define INVALIDLEFT		16
-#define INVALIDRIGHT		0
-
-/* MLC RGB Layer n Invalid Area 0 Top Bottom Register */
-#define INVALIDTOP		16
-#define INVALIDBOTTOM		0
-
-
-//enum {
-//	VID_PRIORITY_FIRST	= 0,   /* video  > Cursor > Window > 3D */
-//	VID_PRIORITY_SECOND	= 1,   /* Cursor > video  > Window > 3D */
-//	VID_PRIORITY_THIRD	= 2,   /* Cursor > Window > video  > 3D */
-//	VID_PRIORITY_INVALID	= 3,
-//};
-
-//enum RGBFMT
-//{
-	//VID_RGBFMT_R5G6B5	= 0x4432,   /* 16bpp { R5, G6, B5 }. */
-	//VID_RGBFMT_B5G6R5	= 0xC432,   /* 16bpp { B5, G6, R5 }. */
-
-	//VID_RGBFMT_X1R5G5B5	= 0x4342,   /* 16bpp { X1, R5, G5, B5 }. */
-	//VID_RGBFMT_X1B5G5R5	= 0xC342,   /* 16bpp { X1, B5, G5, R5 }. */
-	//VID_RGBFMT_X4R4G4B4	= 0x4211,   /* 16bpp { X4, R4, G4, B4 }. */
-	//VID_RGBFMT_X4B4G4R4	= 0xC211,   /* 16bpp { X4, B4, G4, R4 }. */
-	//VID_RGBFMT_X8R3G3B2	= 0x4120,   /* 16bpp { X8, R3, G3, B2 }. */
-	//VID_RGBFMT_X8B3G3R2	= 0xC120,   /* 16bpp { X8, B3, G3, R2 }. */
-
-	//VID_RGBFMT_A1R5G5B5	= 0x3342,   /* 16bpp { A1, R5, G5, B5 }. */
-	//VID_RGBFMT_A1B5G5R5	= 0xB342,   /* 16bpp { A1, B5, G5, R5 }. */
-	//VID_RGBFMT_A4R4G4B4	= 0x2211,   /* 16bpp { A4, R4, G4, B4 }. */
-	//VID_RGBFMT_A4B4G4R4	= 0xA211,   /* 16bpp { A4, B4, G4, R4 }. */
-	//VID_RGBFMT_A8R3G3B2	= 0x1120,   /* 16bpp { A8, R3, G3, B2 }. */
-	//VID_RGBFMT_A8B3G3R2	= 0x9120,   /* 16bpp { A8, B3, G3, R2 }. */
-
-	//VID_RGBFMT_G8R8_G8B8	= 0x4ED3,   /* 16bpp { G8, R8, G8, B8 }. */
-	//VID_RGBFMT_R8G8_B8G8	= 0x4F84,   /* 16bpp { R8, G8, B8, G8 }. */
-	//VID_RGBFMT_G8B8_G8R8	= 0xCED3,   /* 16bpp { G8, B8, G8, R8 }. */
-	//VID_RGBFMT_B8G8_R8G8	= 0xCF84,   /* 16bpp { B8, G8, R8, G8 }. */
-	//VID_RGBFMT_X8L8		= 0x4003,   /* 16bpp { X8, L8 }. */
-	//VID_RGBFMT_A8L8		= 0x1003,   /* 16bpp { A8, L8 }. */
-	//VID_RGBFMT_L16		= 0x4554,   /* 16bpp { L16 }. */
-
-	//VID_RGBFMT_R8G8B8	= 0x4653,   /* 24bpp { R8, G8, B8 }. */
-	//VID_RGBFMT_B8G8R8	= 0xC653,   /* 24bpp { B8, G8, R8 }. */
-
-	//VID_RGBFMT_X8R8G8B8	= 0x4653,   /* 32bpp { X8, R8, G8, B8 }. */
-	//VID_RGBFMT_X8B8G8R8	= 0xC653,   /* 32bpp { X8, B8, G8, R8 }. */
-	//VID_RGBFMT_A8R8G8B8	= 0x0653,   /* 32bpp { A8, R8, G8, B8 }. */
-	//VID_RGBFMT_A8B8G8R8	= 0x8653,   /* 32bpp { A8, B8, G8, R8 }. */
-//};
-
-/* bit masking */
-#define BIT_SET(v,b)	(v |= (1<<(b)))
-#define BIT_CLR(v,b)	(v &= ~(1<<(b)))
-#define IS_SET(v,b)	(v & (1<<(b)))
-#define IS_CLR(v,b)	!(v & (1<<(b)))
-#define BIT_MASK_ONES(b) ((1<<(b))-1)
-
-
-//#define FBIO_MAGIC			'D' //used in the pollux driver. not sure why
-//#define MLC_IOCTBACKGND		_IOW(FBIO_MAGIC, 100, unsigned int)
-//#define MLC_IOCTLAYEREN		_IOW(FBIO_MAGIC, 101, unsigned int)
-//#define MLC_IOCTADDRESS		_IOW(FBIO_MAGIC, 102, unsigned int)
-//#define MLC_IOCTHSTRIDE		_IOW(FBIO_MAGIC, 103, unsigned int)
-//#define MLC_IOCTVSTRIDE		_IOW(FBIO_MAGIC, 104, unsigned int)
-//#define MLC_IOCT3DENB		_IOW(FBIO_MAGIC, 105, unsigned int)
-//#define MLC_IOCTDIRTY		_IOW(FBIO_MAGIC, 106, unsigned int)
-//#define MLC_IOCQDIRTY		_IOR(FBIO_MAGIC, 107, unsigned int)
-//#define MLC_IOCQHSTRIDE		_IOR(FBIO_MAGIC, 108, unsigned int)
-
-//ioctl.h
-struct position_cmd {
-	unsigned int top;
-   	unsigned int left;
-	unsigned int right;
-	unsigned int bottom;
-};
-
-struct screensize_cmd {
-	unsigned int width;
-	unsigned int height;
-};
-
-struct overlaysize_cmd {
-	unsigned int srcwidth;
-	unsigned int srcheight;
-	unsigned int dstwidth;
-	unsigned int dstheight;
-};
-
-union mlc_cmd {
-	struct position_cmd position;
-	struct screensize_cmd screensize;
-	struct overlaysize_cmd overlaysize;
-};
-
-//normally in arch/arm/lf1000/mach/mlc.h
-int mlc_GetAddressCb(u8 layer, int *addr);
-int mlc_GetAddressCr(u8 layer, int *addr);
-
-
-//normally in include/linux/lf1000
-#define MLC_IOC_MAGIC   'm'
-#define MLC_IOCTENABLE		_IO(MLC_IOC_MAGIC,  0)
-#define MLC_IOCTBACKGND		_IO(MLC_IOC_MAGIC,  1)
-#define MLC_IOCQBACKGND		_IO(MLC_IOC_MAGIC,  2)
-#define MLC_IOCTPRIORITY	_IO(MLC_IOC_MAGIC,  3)
-#define MLC_IOCQPRIORITY	_IO(MLC_IOC_MAGIC,  4)
-#define MLC_IOCTTOPDIRTY	_IO(MLC_IOC_MAGIC,  5)
-#define MLC_IOCSSCREENSIZE	_IOW(MLC_IOC_MAGIC, 6, struct screensize_cmd *)
-#define MLC_IOCGSCREENSIZE	_IOR(MLC_IOC_MAGIC, 7, struct screensize_cmd *)
-
-
-
-#define MLC_IOCTLAYEREN		_IO(MLC_IOC_MAGIC,  8)
-#define MLC_IOCTADDRESS		_IO(MLC_IOC_MAGIC,  9)
-#define MLC_IOCQADDRESS		_IO(MLC_IOC_MAGIC,  25)
-#define MLC_IOCQFBSIZE		_IO(MLC_IOC_MAGIC,  29)
-
-
-#define MLC_IOCTHSTRIDE		_IO(MLC_IOC_MAGIC,  10)
-#define MLC_IOCQHSTRIDE		_IO(MLC_IOC_MAGIC,  26)
-#define MLC_IOCTVSTRIDE		_IO(MLC_IOC_MAGIC,  11)
-#define MLC_IOCQVSTRIDE		_IO(MLC_IOC_MAGIC,  27)
-
-	
-#define MLC_IOCTLOCKSIZE	_IO(MLC_IOC_MAGIC,  12)
-#define MLC_IOCSPOSITION	_IOW(MLC_IOC_MAGIC, 13, struct position_cmd *)
-#define MLC_IOCGPOSITION	_IOR(MLC_IOC_MAGIC, 14, struct position_cmd *)
-#define MLC_IOCTFORMAT		_IO(MLC_IOC_MAGIC,  15)
-#define MLC_IOCQFORMAT		_IO(MLC_IOC_MAGIC,  16)
-
-#define MLC_IOCTDIRTY		_IO(MLC_IOC_MAGIC,  17)
-#define MLC_IOCQDIRTY		_IO(MLC_IOC_MAGIC,  32)
-#define MLC_IOCT3DENB		_IO(MLC_IOC_MAGIC,  18)
-#define MLC_IOCQ3DENB		_IO(MLC_IOC_MAGIC,  33)
-
-#define MLC_IOCTALPHA		_IO(MLC_IOC_MAGIC,  19)
-#define MLC_IOCQALPHA		_IO(MLC_IOC_MAGIC,  28)
-#define MLC_IOCTTPCOLOR		_IO(MLC_IOC_MAGIC,  20)
-#define MLC_IOCQTPCOLOR		_IO(MLC_IOC_MAGIC,  40) //PATCH
-#define MLC_IOCTBLEND		_IO(MLC_IOC_MAGIC,  21)
-#define MLC_IOCQBLEND		_IO(MLC_IOC_MAGIC,  41) //PATCH
-#define MLC_IOCTTRANSP		_IO(MLC_IOC_MAGIC,  22)
-#define MLC_IOCQTRANSP		_IO(MLC_IOC_MAGIC,  42) //PATCH
-
-#define MLC_IOCTINVERT		_IO(MLC_IOC_MAGIC,  23)
-#define MLC_IOCQINVERT		_IO(MLC_IOC_MAGIC,  43) //PATCH
-
-#define MLC_IOCTINVCOLOR	_IO(MLC_IOC_MAGIC,  24)
-#define MLC_IOCQINVCOLOR	_IO(MLC_IOC_MAGIC,  44)  //PATCH
-
-#define MLC_IOCSOVERLAYSIZE	_IOW(MLC_IOC_MAGIC, 30, struct overlaysize_cmd *)
-#define MLC_IOCGOVERLAYSIZE	_IOR(MLC_IOC_MAGIC, 31, struct overlaysize_cmd *)
-#define MLC_IOCTINVISIBLE	_IO(MLC_IOC_MAGIC,  34)
-#define MLC_IOCQINVISIBLE	_IO(MLC_IOC_MAGIC,  35)
-
-#define MLC_IOCSINVISIBLEAREA	_IOW(MLC_IOC_MAGIC, 36, struct position_cmd *)
-#define MLC_IOCGINVISIBLEAREA	_IOR(MLC_IOC_MAGIC, 37, struct position_cmd *)
-
-#define MLC_IOCTADDRESSCB	_IO(MLC_IOC_MAGIC,  38)
-#define MLC_IOCQADDRESSCB	_IO(MLC_IOC_MAGIC,  45) //PATCH
-
-#define MLC_IOCTADDRESSCR	_IO(MLC_IOC_MAGIC,  39)
-#define MLC_IOCQADDRESSCR	_IO(MLC_IOC_MAGIC,  46) //PATCH
 
 
 int have_tvout(void)
@@ -521,9 +190,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTENABLE:
 		mlc_SetMLCEnable(arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			mlc_SetMLCEnable(arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -534,9 +203,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTBACKGND:
 		mlc_SetBackground(arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			mlc_SetBackground(arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -547,18 +216,18 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTPRIORITY:
 		result = mlc_SetLayerPriority(arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetLayerPriority(arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
 		case MLC_IOCTTOPDIRTY:
 		mlc_SetTopDirtyFlag();
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			mlc_SetTopDirtyFlag();
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -570,10 +239,10 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		result = mlc_SetScreenSize(c.screensize.width,
 					   c.screensize.height);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetScreenSize(c.screensize.width,
 						   c.screensize.height);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -588,36 +257,36 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTLAYEREN:
 		result = mlc_SetLayerEnable(layerID, arg);
 		if (have_tvout()) {
-			memregs+= 0x400;
+			mlcregs+= 0x400;
 			result = mlc_SetLayerEnable(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
 		case MLC_IOCTADDRESS:
 		result = mlc_SetAddress(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetAddress(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
 		case MLC_IOCTHSTRIDE:
 		result = mlc_SetHStride(layerID, arg);
 		if (have_tvout()) {
-			memregs+= 0x400;
+			mlcregs+= 0x400;
 			result = mlc_SetHStride(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
 		case MLC_IOCTVSTRIDE:
 		result = mlc_SetVStride(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetVStride(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -628,9 +297,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTLOCKSIZE:
 		result = mlc_SetLockSize(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetLockSize(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
@@ -647,13 +316,13 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 					 c.position.right,
 					 c.position.bottom);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetPosition(layerID,
 						 c.position.top,
 						 c.position.left,
 						 c.position.right,
 						 c.position.bottom);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -672,9 +341,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTFORMAT:
 		result = mlc_SetFormat(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetFormat(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -686,9 +355,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCT3DENB:
 		result = mlc_Set3DEnable(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_Set3DEnable(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -703,9 +372,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTALPHA:
 		result = mlc_SetTransparencyAlpha(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetTransparencyAlpha(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -716,9 +385,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTTPCOLOR:
 		result = mlc_SetTransparencyColor(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetTransparencyColor(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -732,9 +401,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTBLEND:
 		result = mlc_SetBlendEnable(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetBlendEnable(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -746,9 +415,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTTRANSP:
 		result = mlc_SetTransparencyEnable(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetTransparencyEnable(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -760,9 +429,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTINVERT:
 		result = mlc_SetInvertEnable(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetInvertEnable(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -774,9 +443,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTINVCOLOR:
 		result = mlc_SetInvertColor(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetInvertColor(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		
 		case MLC_IOCQINVCOLOR:
@@ -796,13 +465,13 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 					    c.overlaysize.dstwidth,
 					    c.overlaysize.dstheight);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetOverlaySize(layerID,
 						    c.overlaysize.srcwidth,
 						    c.overlaysize.srcheight,
 						    c.overlaysize.dstwidth,
 						    c.overlaysize.dstheight);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -855,9 +524,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTADDRESSCB:
 		result = mlc_SetAddressCb(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetAddressCb(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -866,9 +535,9 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTADDRESSCR:
 		result = mlc_SetAddressCr(layerID, arg);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetAddressCr(layerID, arg);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 		
@@ -876,18 +545,18 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		case MLC_IOCTDIRTY:
 		result = mlc_SetDirtyFlag(layerID);
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_SetDirtyFlag(layerID);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		}
 		break;
 
 		case MLC_IOCQDIRTY:
 		/* query 2nd MLC for proper sync on TV + LCD out */
 		if (have_tvout()) {
-			memregs += 0x400;
+			mlcregs += 0x400;
 			result = mlc_GetDirtyFlag(layerID);
-			memregs -= 0x400;
+			mlcregs -= 0x400;
 		} else {
 			result = mlc_GetDirtyFlag(layerID);
 		}
@@ -934,38 +603,38 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 void mlc_SetMLCEnable(u8 en)
 {
-	u32 tmp = ioread32(memregs+MLCCONTROLT);
+	u32 tmp = ioread32(mlcregs+MLCCONTROLT);
 
 	BIT_CLR(tmp,DITTYFLAG);
 
 	if(en) {
 		BIT_SET(tmp,PIXELBUFFER_PWD); 	/* power up */
-		iowrite32(tmp, memregs+MLCCONTROLT);
+		iowrite32(tmp, mlcregs+MLCCONTROLT);
 		BIT_SET(tmp,PIXELBUFFER_SLD); 	/* disable sleep */
-		iowrite32(tmp, memregs+MLCCONTROLT);
+		iowrite32(tmp, mlcregs+MLCCONTROLT);
 	}
 	else {
 		BIT_CLR(tmp,MLCENB);		/* disable */
 		BIT_SET(tmp,DITTYFLAG);
-		iowrite32(tmp, memregs+MLCCONTROLT);
+		iowrite32(tmp, mlcregs+MLCCONTROLT);
 		do { /* wait for MLC to turn off */
-			tmp = ioread32(memregs+MLCCONTROLT);
+			tmp = ioread32(mlcregs+MLCCONTROLT);
 		} while(IS_SET(tmp,DITTYFLAG));
 		BIT_CLR(tmp,PIXELBUFFER_SLD);	/* enable sleep */
-		iowrite32(tmp, memregs+MLCCONTROLT);
+		iowrite32(tmp, mlcregs+MLCCONTROLT);
 		BIT_CLR(tmp,PIXELBUFFER_PWD);	/* power down */
 	}
 
-	iowrite32(tmp,memregs+MLCCONTROLT);
+	iowrite32(tmp,mlcregs+MLCCONTROLT);
 }
 
 
 
 static void *SelectLayerControl(u8 layer)
 {
-	void *ctl = memregs;
+	void *ctl = mlcregs;
 
-	if(!memregs) {
+	if(!mlcregs) {
 		return 0;
 	}
 	switch(layer) {
@@ -1015,13 +684,13 @@ int mlc_GetAddress(u8 layer, int *addr) /* FIXME */
 	
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCADDRESS0;
+		reg = mlcregs+MLCADDRESS0;
 		break;
 		case 1:
-		reg = memregs+MLCADDRESS1;
+		reg = mlcregs+MLCADDRESS1;
 		break;
 		case 2:
-		reg = memregs+MLCADDRESS2; /* note: weird datasheet naming - says MLCADDRESS3 */
+		reg = mlcregs+MLCADDRESS2; /* note: weird datasheet naming - says MLCADDRESS3 */
 		break;
 	}
 
@@ -1036,7 +705,7 @@ int mlc_GetAddressCb(u8 layer, int *addr)
 	if(layer > MLC_NUM_LAYERS || layer != MLC_VIDEO_LAYER)
 		return -EINVAL;
 
-	reg = memregs+MLCADDRESSCB;
+	reg = mlcregs+MLCADDRESSCB;
 	*addr = ioread32(reg);
 	return 0;
 }
@@ -1048,7 +717,7 @@ int mlc_GetAddressCr(u8 layer, int *addr)
 	if(layer > MLC_NUM_LAYERS || layer != MLC_VIDEO_LAYER)
 		return -EINVAL;
 
-	reg = memregs+MLCADDRESSCR;
+	reg = mlcregs+MLCADDRESSCR;
 	*addr = ioread32(reg);
 	return 0;
 }
@@ -1061,18 +730,18 @@ int mlc_SetAddress(u8 layer, u32 addr)
 	if(layer > MLC_NUM_LAYERS) 
 		return -EINVAL;
 
-	if(!memregs)
+	if(!mlcregs)
 		return -ENOMEM;
 		
 	switch(layer) {
 		case 0:
-		reg = memregs + MLCADDRESS0;
+		reg = mlcregs + MLCADDRESS0;
 		break;
 		case 1:
-		reg = memregs + MLCADDRESS1;
+		reg = mlcregs + MLCADDRESS1;
 		break;
 		case 2:
-		reg = memregs + MLCADDRESS2; /* note: weird datasheet naming MLCADDRESS3 */
+		reg = mlcregs + MLCADDRESS2; /* note: weird datasheet naming MLCADDRESS3 */
 		break;
 	}
 
@@ -1084,7 +753,7 @@ int mlc_GetHStride(u8 layer)
 {
 	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
 		return -EINVAL;
-	return ioread32(memregs+MLCHSTRIDE0+layer*0x34);
+	return ioread32(mlcregs+MLCHSTRIDE0+layer*0x34);
 }
 
 int mlc_SetHStride(u8 layer, u32 hstride)
@@ -1093,7 +762,7 @@ int mlc_SetHStride(u8 layer, u32 hstride)
 		return -EINVAL;
 
 	//hstride &= 0x7FFFFFFF;
-	iowrite32(hstride, memregs + MLCHSTRIDE0);
+	iowrite32(hstride, mlcregs + MLCHSTRIDE0);
 
 
 	return 0;
@@ -1108,21 +777,21 @@ int mlc_SetVStride(u8 layer, u32 vstride)
 
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCVSTRIDE0;
+		reg = mlcregs+MLCVSTRIDE0;
 		break;
 		case 1:
-		reg = memregs+MLCVSTRIDE1;
+		reg = mlcregs+MLCVSTRIDE1;
 		break;
 		case 2:
-		reg = memregs+MLCVSTRIDE2; /* note: weird datasheet naming MLCVSTRIDE3*/
+		reg = mlcregs+MLCVSTRIDE2; /* note: weird datasheet naming MLCVSTRIDE3*/
 		break;
 	}
 	
 	iowrite32(vstride, reg);
 	
 	  if (layer == MLC_VIDEO_LAYER) {
-		iowrite32(vstride, memregs+MLCSTRIDECB);
-		iowrite32(vstride, memregs+MLCSTRIDECR);
+		iowrite32(vstride, mlcregs+MLCSTRIDECB);
+		iowrite32(vstride, mlcregs+MLCSTRIDECR);
 	}
 	
 	return 0;
@@ -1137,13 +806,13 @@ int mlc_GetVStride(u8 layer)
 
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCVSTRIDE0;
+		reg = mlcregs+MLCVSTRIDE0;
 		break;
 		case 1:
-		reg = memregs+MLCVSTRIDE1;
+		reg = mlcregs+MLCVSTRIDE1;
 		break;
 		case 2:
-		reg = memregs+MLCVSTRIDE2; /* note: weird datasheet naming - they have MLCSTRIDE3*/
+		reg = mlcregs+MLCVSTRIDE2; /* note: weird datasheet naming - they have MLCSTRIDE3*/
 		break;
 	}
 	return ioread32(reg);
@@ -1202,17 +871,17 @@ int mlc_Get3DEnable(u8 layer, int *en) /*original comment said: FIXME*/
 
 u32 mlc_GetBackground(void)
 {
-	return ioread32(memregs+MLCBGCOLOR);
+	return ioread32(mlcregs+MLCBGCOLOR);
 }
 
 void mlc_SetBackground(u32 color)
 {
-	iowrite32((0xFFFFFF & color),memregs+MLCBGCOLOR);
+	iowrite32((0xFFFFFF & color),mlcregs+MLCBGCOLOR);
 }
 
 u32 mlc_GetLayerPriority(void)
 {
-	u32 tmp = ioread32(memregs+MLCCONTROLT);
+	u32 tmp = ioread32(mlcregs+MLCCONTROLT);
 	return ((tmp & (0x3<<PRIORITY))>>PRIORITY);
 }
 
@@ -1223,20 +892,20 @@ int mlc_SetLayerPriority(u32 priority)
 	if(priority >= VID_PRIORITY_INVALID)
 		return -EINVAL;
 
-	tmp = ioread32(memregs+MLCCONTROLT);
+	tmp = ioread32(mlcregs+MLCCONTROLT);
 	tmp &= ~(0x3<<PRIORITY);
 	tmp |= (priority<<PRIORITY);
-	iowrite32(tmp,memregs+MLCCONTROLT);
+	iowrite32(tmp,mlcregs+MLCCONTROLT);
 	return 0;
 }
 
 
 void mlc_SetTopDirtyFlag(void)
 {
-	u32 tmp = ioread32(memregs+MLCCONTROLT);
+	u32 tmp = ioread32(mlcregs+MLCCONTROLT);
 
 	BIT_SET(tmp,DITTYFLAG);
-	iowrite32(tmp,memregs+MLCCONTROLT);
+	iowrite32(tmp,mlcregs+MLCCONTROLT);
 }
 
 int mlc_SetScreenSize(u32 width, u32 height)
@@ -1245,13 +914,13 @@ int mlc_SetScreenSize(u32 width, u32 height)
 		return -EINVAL;
 
 	iowrite32((((height-1)<<SCREENHEIGHT)|((width-1)<<SCREENWIDTH)),
-				memregs+MLCSCREENSIZE);
+				mlcregs+MLCSCREENSIZE);
 	return 0;
 }
 
 void mlc_GetScreenSize(struct mlc_screen_size *size)
 {
-	u32 tmp = ioread32(memregs+MLCSCREENSIZE);
+	u32 tmp = ioread32(mlcregs+MLCSCREENSIZE);
 
 	size->width  = ((tmp & (0x7FF<<SCREENWIDTH))>>SCREENWIDTH)+1;
 	size->height = ((tmp & (0x7FF<<SCREENHEIGHT))>>SCREENHEIGHT)+1;
@@ -1304,9 +973,9 @@ int mlc_SetPosition(u8 layer, s32 top, s32 left, s32 right, s32 bottom)
 	bottom &= 0x7FF;
 
 	iowrite32(((left<<LEFT)|(right<<RIGHT)),
-			memregs+MLCLEFTRIGHT0+0x34*layer);
+			mlcregs+MLCLEFTRIGHT0+0x34*layer);
 	iowrite32(((top<<TOP)|(bottom<<BOTTOM)),
-			memregs+MLCTOPBOTTOM0+0x34*layer);
+			mlcregs+MLCTOPBOTTOM0+0x34*layer);
 	return 0;
 }
 
@@ -1317,11 +986,11 @@ int mlc_GetPosition(u8 layer, struct mlc_layer_position *p)
 	if(layer > MLC_NUM_LAYERS)
 		return -EINVAL;
 
-	tmp = ioread32(memregs+MLCLEFTRIGHT0+0x34*layer);
+	tmp = ioread32(mlcregs+MLCLEFTRIGHT0+0x34*layer);
 	p->left = ((tmp & (0x7FF<<LEFT))>>LEFT);
 	p->right  = ((tmp & (0x7FF<<RIGHT))>>RIGHT);
 
-	tmp = ioread32(memregs+MLCTOPBOTTOM0+0x34*layer);
+	tmp = ioread32(mlcregs+MLCTOPBOTTOM0+0x34*layer);
 	p->top  = ((tmp & (0x7FF<<TOP))>>TOP);
 	p->bottom = ((tmp & (0x7FF<<BOTTOM))>>BOTTOM);
 	return 0;
@@ -1368,19 +1037,19 @@ int mlc_SetTransparencyAlpha(u8 layer, u8 alpha)
 		return -EINVAL;
 
 	//if (layer == MLC_VIDEO_LAYER) 
-	//	reg = memregs+MLCTPCOLOR2;
+	//	reg = mlcregs+MLCTPCOLOR2;
 	//else
-	//	reg = memregs+MLCTPCOLOR0+layer*0x34;
+	//	reg = mlcregs+MLCTPCOLOR0+layer*0x34;
 		
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCTPCOLOR0;
+		reg = mlcregs+MLCTPCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCTPCOLOR1;
+		reg = mlcregs+MLCTPCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
+		reg = mlcregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
 		break;
 	}
 	
@@ -1406,13 +1075,13 @@ int mlc_GetTransparencyAlpha(u8 layer)
 	//	reg = mlc.mem+MLCTPCOLOR0+layer*0x34;
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCTPCOLOR0;
+		reg = mlcregs+MLCTPCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCTPCOLOR1;
+		reg = mlcregs+MLCTPCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
+		reg = mlcregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
 		break;
 	}
 	tmp = ioread32(reg);
@@ -1432,13 +1101,13 @@ int mlc_SetTransparencyColor(u8 layer, u32 color)
     //reg = SelectLayerControl(layer) + MLCTPCOLOR0 - MLCCONTROL0;
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCTPCOLOR0;
+		reg = mlcregs+MLCTPCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCTPCOLOR1;
+		reg = mlcregs+MLCTPCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
+		reg = mlcregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
 		break;
 	}
 	
@@ -1458,13 +1127,13 @@ int mlc_GetTransparencyColor(u8 layer, int *color)
 		return -EINVAL;
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCTPCOLOR0;
+		reg = mlcregs+MLCTPCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCTPCOLOR1;
+		reg = mlcregs+MLCTPCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
+		reg = mlcregs+MLCTPCOLOR2; /* note: weird datasheet naming - says MLCTPCOLOR3 */
 		break;
 	}
 //	reg = SelectLayerControl(layer);
@@ -1582,13 +1251,13 @@ int mlc_SetInvertColor(u8 layer, u32 color)
 	//reg = mlc.mem+MLCINVCOLOR0+layer*0x34;
 		switch(layer) {
 		case 0:
-		reg = memregs+MLCINVCOLOR0;
+		reg = mlcregs+MLCINVCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCINVCOLOR1;
+		reg = mlcregs+MLCINVCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCINVCOLOR2; 
+		reg = mlcregs+MLCINVCOLOR2; 
 		break;
 	}
 	
@@ -1611,13 +1280,13 @@ int mlc_GetInvertColor(u8 layer, int *color)
 	//reg = mlc.mem+MLCINVCOLOR0+layer*0x34;
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCINVCOLOR0;
+		reg = mlcregs+MLCINVCOLOR0;
 		break;
 		case 1:
-		reg = memregs+MLCINVCOLOR1;
+		reg = mlcregs+MLCINVCOLOR1;
 		break;
 		case 2:
-		reg = memregs+MLCINVCOLOR2; 
+		reg = mlcregs+MLCINVCOLOR2; 
 		break;
 	}
 
@@ -1632,21 +1301,21 @@ int mlc_SetOverlaySize(u8 layer, u32 srcwidth, u32 srcheight, u32 dstwidth,
 {
 	/* Enable adjusted ratio with bilinear filter for upscaling */
 	if (srcwidth < dstwidth)
-		iowrite32((1<<28) | (((srcwidth-1)<<11)/(dstwidth-1)), memregs+MLCHSCALE);
+		iowrite32((1<<28) | (((srcwidth-1)<<11)/(dstwidth-1)), mlcregs+MLCHSCALE);
 	else
-		iowrite32((srcwidth<<11)/(dstwidth), memregs+MLCHSCALE);
+		iowrite32((srcwidth<<11)/(dstwidth), mlcregs+MLCHSCALE);
 	/* Ditto for height which scales independently of width */
 	if (srcheight < dstheight)	
-		iowrite32((1<<28) | (((srcheight-1)<<11)/(dstheight-1)), memregs+MLCVSCALE);
+		iowrite32((1<<28) | (((srcheight-1)<<11)/(dstheight-1)), mlcregs+MLCVSCALE);
 	else
-		iowrite32((srcheight<<11)/(dstheight), memregs+MLCVSCALE);
+		iowrite32((srcheight<<11)/(dstheight), mlcregs+MLCVSCALE);
 	return 0;
 }
 
 int mlc_GetOverlaySize(u8 layer, struct mlc_overlay_size *psize)
 {
-	u32 hscale = ioread32(memregs+MLCHSCALE);
-	u32 vscale = ioread32(memregs+MLCVSCALE);
+	u32 hscale = ioread32(mlcregs+MLCHSCALE);
+	u32 vscale = ioread32(mlcregs+MLCVSCALE);
 
 	psize->srcwidth = (hscale>>11) & 0x7FF;
 	psize->srcheight = hscale & 0x7FF;
@@ -1666,14 +1335,14 @@ int mlc_SetLayerInvisibleAreaEnable(u8 layer, u8 en) /***********************VAL
 		
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCLEFTRIGHT0_0;
+		reg = mlcregs+MLCLEFTRIGHT0_0;
 		break;
 		case 1:
-		reg = memregs+MLCLEFTRIGHT1_0;
+		reg = mlcregs+MLCLEFTRIGHT1_0;
 		break;
 	}
 
-	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	//reg = mlcregs+MLCLEFTRIGHT0_0+layer*0x34;
 	tmp = ioread32(reg);
 	en ? BIT_SET(tmp, INVALIDENB) : BIT_CLR(tmp, INVALIDENB);
 	iowrite32(tmp, reg);
@@ -1689,14 +1358,14 @@ int mlc_GetLayerInvisibleAreaEnable(u8 layer) /***********************VALIDATE?*
 	if(layer > MLC_NUM_LAYERS || layer == MLC_VIDEO_LAYER)
 		return -EINVAL;
 
-	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	//reg = mlcregs+MLCLEFTRIGHT0_0+layer*0x34;
 	
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCLEFTRIGHT0_0;
+		reg = mlcregs+MLCLEFTRIGHT0_0;
 		break;
 		case 1:
-		reg = memregs+MLCLEFTRIGHT1_0;
+		reg = mlcregs+MLCLEFTRIGHT1_0;
 		break;
 	}
 	tmp = ioread32(reg);
@@ -1717,14 +1386,14 @@ int mlc_SetLayerInvisibleArea(u8 layer, s32 top, s32 left, s32 right, s32 bottom
 	right &= 0x7FF;
 	bottom &= 0x7FF;
 
-	//reg = memregs+MLCLEFTRIGHT0_0+layer*0x34;
+	//reg = mlcregs+MLCLEFTRIGHT0_0+layer*0x34;
 	
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCLEFTRIGHT0_0;
+		reg = mlcregs+MLCLEFTRIGHT0_0;
 		break;
 		case 1:
-		reg = memregs+MLCLEFTRIGHT1_0;
+		reg = mlcregs+MLCLEFTRIGHT1_0;
 		break;
 	}
 	tmp = ioread32(reg);
@@ -1732,13 +1401,13 @@ int mlc_SetLayerInvisibleArea(u8 layer, s32 top, s32 left, s32 right, s32 bottom
 	tmp |= (left<<INVALIDLEFT)|(right<<INVALIDRIGHT);
 	iowrite32(tmp, reg);
 
-	//reg = memregs+MLCTOPBOTTOM0_0+layer*0x34;
+	//reg = mlcregs+MLCTOPBOTTOM0_0+layer*0x34;
 	switch(layer) {
 		case 0:
-		reg = memregs+MLCTOPBOTTOM0_0;
+		reg = mlcregs+MLCTOPBOTTOM0_0;
 		break;
 		case 1:
-		reg = memregs+MLCTOPBOTTOM1_0;
+		reg = mlcregs+MLCTOPBOTTOM1_0;
 		break;
 	}
 	
@@ -1762,10 +1431,10 @@ int mlc_GetLayerInvisibleArea(u8 layer, struct mlc_layer_position *p)
 	
 	switch(layer) {
 		case 0:
-		tmp = memregs+MLCLEFTRIGHT0_0;
+		tmp = mlcregs+MLCLEFTRIGHT0_0;
 		break;
 		case 1:
-		tmp = memregs+MLCLEFTRIGHT1_0;
+		tmp = mlcregs+MLCLEFTRIGHT1_0;
 		break;
 	}
 	p->left = ((tmp & (0x7FF<<LEFT))>>LEFT);
@@ -1774,10 +1443,10 @@ int mlc_GetLayerInvisibleArea(u8 layer, struct mlc_layer_position *p)
 	//tmp = ioread32(mlc.mem+MLCTOPBOTTOM0_0+0x34*layer);
 	switch(layer) {
 		case 0:
-		tmp = memregs+MLCTOPBOTTOM0_0;
+		tmp = mlcregs+MLCTOPBOTTOM0_0;
 		break;
 		case 1:
-		tmp = memregs+MLCTOPBOTTOM1_0;
+		tmp = mlcregs+MLCTOPBOTTOM1_0;
 		break;
 	}
 	p->top  = ((tmp & (0x7FF<<TOP))>>TOP);
@@ -1791,7 +1460,7 @@ int mlc_SetAddressCb(u8 layer, u32 addr)
 {
 	if (layer != MLC_VIDEO_LAYER) 
 		return -EINVAL;
-	iowrite32(addr, memregs+MLCADDRESSCB);
+	iowrite32(addr, mlcregs+MLCADDRESSCB);
 	return 0;
 }
 
@@ -1802,11 +1471,482 @@ int mlc_SetAddressCr(u8 layer, u32 addr)
 {
 	if (layer != MLC_VIDEO_LAYER) 
 		return -EINVAL;
-	iowrite32(addr, memregs+MLCADDRESSCR);
+	iowrite32(addr, mlcregs+MLCADDRESSCR);
+	return 0;
+}
+
+void mlc_SetClockMode(u8 pclk, u8 bclk)
+{
+	u32 tmp = ioread32(mlcregs+MLCCLKENB);
+
+	tmp &= ~(0xF);
+	tmp |= ((pclk<<_PCLKMODE)|(bclk<<BCLKMODE));
+	iowrite32(tmp,mlcregs+MLCCLKENB);
+}
+
+void mlc_SetFieldEnable(u8 en)
+{
+	u32 tmp = ioread32(mlcregs+MLCCONTROLT);
+	en ? BIT_SET(tmp,FIELDENB) : BIT_CLR(tmp,FIELDENB);
+	iowrite32(tmp,mlcregs+MLCCONTROLT);
+}
+
+/*
+ * 
+ * DPC Functions
+ * 
+ * 
+ */
+
+int dpc_SetClock0(u8 source, u8 div, u8 delay, u8 out_inv, u8 out_en)
+{
+	void *base = dpcregs;
+	u32 tmp;
+
+	if(source > 7 || delay > 6)
+		return -EINVAL;
+
+	tmp = ioread32(base+DPCCLKGEN0);
+	tmp &= ~((7<<CLKSRCSEL0)|(0x3F<<CLKDIV0)|(3<<OUTCLKDELAY0));
+
+	tmp |= (source<<CLKSRCSEL0);	/* clock source */
+	tmp |= ((0x3F&div)<<CLKDIV0);	/* clock divider */
+	tmp |= (delay<<OUTCLKDELAY0);	/* output clock delay */
+
+	out_inv ? BIT_SET(tmp,OUTCLKINV0) : BIT_CLR(tmp,OUTCLKINV0);
+	out_en ? BIT_SET(tmp,OUTCLKENB) : BIT_CLR(tmp,OUTCLKENB);
+
+	iowrite32(tmp,base+DPCCLKGEN0);
+	return 0;
+}
+
+void dpc_SetClockPClkMode(u8 mode)
+{
+	void *base = dpcregs;
+	u32 tmp = ioread32(base+DPCCLKENB);
+
+	mode ? BIT_SET(tmp,_PCLKMODE) : BIT_CLR(tmp,_PCLKMODE);
+	iowrite32(tmp,base+DPCCLKENB);
+}
+
+int dpc_SetClock1( u8 source, u8 div, u8 delay, u8 out_inv )
+{
+	void *base = dpcregs;
+	u32 tmp;
+
+	if( source > 7 || delay > 6 )
+		return -EINVAL;
+
+	tmp = ioread32(base+DPCCLKGEN1);
+	tmp &= ~((7<<CLKSRCSEL1)|(0x3F<<CLKDIV1)|(3<<OUTCLKDELAY1));
+
+	tmp |= (source<<CLKSRCSEL1);	/* clock source */
+	tmp |= ((0x3F&div)<<CLKDIV1);	/* clock divider */
+	tmp |= (delay<<OUTCLKDELAY1);	/* output clock delay */
+	out_inv ? BIT_SET(tmp,OUTCLKINV1) : BIT_CLR(tmp,OUTCLKINV1);
+
+	iowrite32(tmp,base+DPCCLKGEN1);
+	return 0;
+}
+
+void dpc_SetClockEnable(u8 en)
+{
+	void *base = dpcregs;
+	u32 tmp = ioread32(base+DPCCLKENB);
+
+	en ? BIT_SET(tmp,_CLKGENENB) : BIT_CLR(tmp,_CLKGENENB);
+	iowrite32(tmp,base+DPCCLKENB);
+}
+
+void dpc_SetDPCEnable(void)
+{
+	void *base = dpcregs;
+	u16 tmp = ioread16(base+DPCCTRL0);
+
+	BIT_SET(tmp,DPCENB);
+	BIT_CLR(tmp,_INTENB); /* disable VSYNC interrupt */
+	iowrite16(tmp,base+DPCCTRL0);
+}
+
+int dpc_SetMode(u8 format,
+		u8 interlace,
+		u8 invert_field,
+		u8 rgb_mode,
+		u8 swap_rb,
+		u8 ycorder,
+		u8 clip_yc,
+		u8 embedded_sync,
+		u8 clock)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	if(format >= 14 || ycorder > 3 || clock > 3)
+		return -EINVAL;
+
+	/* DPC Control 0 Register */
+	
+	tmp = ioread16(base+DPCCTRL0);
+	BIT_CLR(tmp,_INTPEND);
+
+	/* set flags */
+	interlace ? BIT_SET(tmp,SCANMODE) : BIT_CLR(tmp,SCANMODE);
+	invert_field ? BIT_SET(tmp,POLFIELD) : BIT_CLR(tmp,POLFIELD);
+	rgb_mode ? BIT_SET(tmp,RGBMODE) : BIT_CLR(tmp,RGBMODE);
+	embedded_sync ? BIT_SET(tmp,SEAVENB) : BIT_CLR(tmp,SEAVENB);
+
+	iowrite16(tmp,base+DPCCTRL0);
+
+	/* DPC Control 1 Register */
+
+	tmp = ioread16(base+DPCCTRL1);
+	tmp &= ~(0xAFFF);  /* clear all fields except reserved bits */ 
+	tmp |= ((ycorder<<YCORDER)|(format<<FORMAT1));
+	clip_yc ?  BIT_CLR(tmp,YCRANGE) : BIT_SET(tmp,YCRANGE);
+	swap_rb ? BIT_SET(tmp,SWAPRB) : BIT_CLR(tmp,SWAPRB);
+	iowrite16(tmp,base+DPCCTRL1);
+
+	/* DPC Control 2 Register */
+
+	tmp = ioread16(base+DPCCTRL2);
+	tmp &= ~(3<<PADCLKSEL);
+	tmp |= (clock<<PADCLKSEL);
+	iowrite16(tmp,base+DPCCTRL2);
+
 	return 0;
 }
 
 
+int dpc_SetHSync(u32 avwidth, u32 hsw, u32 hfp, u32 hbp, u8 inv_hsync)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	if( avwidth + hfp + hsw + hbp > 65536 || hsw == 0 )
+		return -EINVAL;
+
+	iowrite16((u16)(hsw+hbp+hfp+avwidth-1),base+DPCHTOTAL);
+	iowrite16((u16)(hsw-1),base+DPCHSWIDTH);
+	iowrite16((u16)(hsw+hbp-1),base+DPCHASTART);
+	iowrite16((u16)(hsw+hbp+avwidth-1),base+DPCHAEND);
+
+	tmp = ioread16(base+DPCCTRL0);
+	BIT_CLR(tmp,_INTPEND);
+	if(inv_hsync)
+		BIT_SET(tmp,POLHSYNC);
+	else
+		BIT_CLR(tmp,POLHSYNC);
+	iowrite16(tmp,base+DPCCTRL0);
+
+	return 0;
+}
+
+int dpc_SetVSync(u32 avheight, u32 vsw, u32 vfp, u32 vbp, u8 inv_vsync,
+		u32 eavheight, u32 evsw, u32 evfp, u32 evbp)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	if( avheight+vfp+vsw+vbp > 65536 || avheight+evfp+evsw+evbp > 65536 ||
+		vsw == 0 || evsw == 0 )
+		return -EINVAL;
+
+	iowrite16((u16)(vsw+vbp+avheight+vfp-1),base+DPCVTOTAL);
+	iowrite16((u16)(vsw-1),base+DPCVSWIDTH);
+	iowrite16((u16)(vsw+vbp-1),base+DPCVASTART);
+	iowrite16((u16)(vsw+vbp+avheight-1),base+DPCVAEND);
+
+	iowrite16((u16)(evsw+evbp+eavheight+evfp-1),base+DPCEVTOTAL);
+	iowrite16((u16)(evsw-1),base+DPCEVSWIDTH);
+	iowrite16((u16)(evsw+evbp-1),base+DPCEVASTART);
+	iowrite16((u16)(evsw+evbp+eavheight-1),base+DPCEVAEND);
+
+	tmp = ioread16(base+DPCCTRL0);
+	BIT_CLR(tmp,_INTPEND);
+	inv_vsync ? BIT_SET(tmp,POLVSYNC) : BIT_CLR(tmp,POLVSYNC);
+	iowrite16(tmp,base+DPCCTRL0);
+	return 0;
+}
+
+void dpc_SetVSyncOffset(u16 vss_off, u16 vse_off, u16 evss_off, u16 evse_off)
+{
+	iowrite16(vse_off,dpcregs+DPCVSEOFFSET);
+	iowrite16(vss_off,dpcregs+DPCVSSOFFSET);
+	iowrite16(evse_off,dpcregs+DPCEVSEOFFSET);
+	iowrite16(evss_off,dpcregs+DPCEVSSOFFSET);
+}
+
+int dpc_SetDelay(u8 rgb, u8 hs, u8 vs, u8 de, u8 lp, u8 sp, u8 rev)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	if(rgb>=16 || hs>=16 || vs>=16 || de>=16 || lp>=16 || sp>=16 || rev>=16 )
+		return -EINVAL;
+
+	tmp = ioread16(base+DPCCTRL0);
+	tmp &= ~((1<<_INTPEND)|(0xF<<DELAYRGB));
+	tmp |= (rgb<<DELAYRGB);
+	iowrite16(tmp,base+DPCCTRL0);
+
+	iowrite16((u16)((de<<DELAYDE)|(vs<<DELAYVS)|(hs<<DELAYHS)),
+				base+DPCDELAY0);
+
+	return 0;
+}
+
+int dpc_SetDither(u8 r, u8 g, u8 b)
+{
+	u16 tmp;
+
+	if(r >= 4 || g >= 4 || b >= 4)
+		return -EINVAL;
+
+	tmp = ioread16(dpcregs+DPCCTRL1);
+	tmp &= ~(0x3F);
+	tmp |= ((r<<RDITHER)|(g<<GDITHER)|(b<<BDITHER));
+	iowrite16(tmp,dpcregs+DPCCTRL1);
+	return 0;
+}
+
+void dpc_SetEncoderEnable(u8 en)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* encoder enable */
+	tmp = ioread16(base+DPCCTRL0);
+	BIT_CLR(tmp,_INTPEND);
+	en ? BIT_SET(tmp,DACENB) : BIT_CLR(tmp,DACENB); 
+	BIT_SET(tmp,ENCENB);
+	iowrite16(tmp,base+DPCCTRL0);
+
+	/* encoder timing config */
+	iowrite16(0x0007,base+VENCICNTL);
+}
+
+void dpc_ResetEncoder(void)
+{
+	/* encoder reset sequence */
+	dpc_SetEncoderEnable(1);
+	udelay(100);
+	dpc_SetClockEnable(1);
+	udelay(100);
+	dpc_SetEncoderEnable(0);
+	udelay(100);
+	dpc_SetClockEnable(0);
+	udelay(100);
+	dpc_SetEncoderEnable(1);
+}
+
+void dpc_SetEncoderPowerDown(u8 en)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* power down mode */
+	tmp = ioread16(base+VENCCTRLA);
+	en ? BIT_SET(tmp,7) : BIT_CLR(tmp,7);
+	iowrite16(tmp,base+VENCCTRLA);
+
+	/* DAC output enable */
+	tmp = (en) ? 0x0000 : 0x0001;
+	iowrite16(tmp,base+VENCDACSEL);
+}
+
+void dpc_SetEncoderMode(u8 fmt, u8 ped)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* NTSC mode with pedestal */
+	tmp = ioread16(base+VENCCTRLA);
+	BIT_SET(tmp,6);
+	BIT_CLR(tmp,5);
+	BIT_CLR(tmp,4);
+	BIT_SET(tmp,3);
+	iowrite16(tmp,base+VENCCTRLA);
+}
+
+void dpc_SetEncoderFSCAdjust(u16 fsc)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* color burst frequency adjust */
+	tmp = fsc;
+	iowrite16(tmp >> 8,base+VENCFSCADJH);
+	iowrite16(tmp & 0xFF, base+VENCFSCADJL);
+	
+}
+
+void dpc_SetEncoderBandwidth(u16 ybw, u16 cbw)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* luma/chroma bandwidth */
+	tmp = (cbw << 2) | ybw;
+	iowrite16(tmp,base+VENCCTRLB);
+}
+
+void dpc_SetEncoderColor(u16 sch, u16 hue, u16 sat, u16 cnt, u16 brt)
+{
+	void *base = dpcregs;
+
+	/* color phase, hue, saturation, contrast, brightness */
+	iowrite16(sch,base+VENCSCH);
+	iowrite16(hue,base+VENCHUE);
+	iowrite16(sat,base+VENCSAT);
+	iowrite16(cnt,base+VENCCRT);
+	iowrite16(brt,base+VENCBRT);
+}
+
+void dpc_SetEncoderTiming(u16 hs, u16 he, u16 vs, u16 ve)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* horizontal start/end, vertical start/end */
+	tmp = ((he-1) >> 8) & 0x7;
+	iowrite16(tmp,base+VENCHSVS0);
+	tmp = hs-1;
+	iowrite16(tmp,base+VENCHSOS);
+	tmp = he-1;
+	iowrite16(tmp,base+VENCHSOE);
+	tmp = vs;
+	iowrite16(tmp,base+VENCVSOS);
+	tmp = ve;
+	iowrite16(tmp,base+VENCVSOE);
+}
+
+void dpc_SetEncoderUpscaler(u16 src, u16 dst)
+{
+	void *base = dpcregs;
+	u16 tmp;
+
+	/* horizontal upscaler */
+	tmp = src-1;
+	iowrite16(tmp,base+DPUPSCALECON2);
+	tmp = ((src-1) * (1 << 11)) / (dst-1);
+	iowrite16(tmp >> 8,base+DPUPSCALECON1);
+	iowrite16(((tmp & 0xFF) << 8) | 1,base+DPUPSCALECON0);
+}
+
+static void enable_tvout(struct fb_info *info)
+{	
+	//info->var.xres
+	printk(KERN_INFO "lf1000fb-TV-Out: source xres: %d\n", info->var.xres);
+
+	//struct lf1000fb_info *fbi;
+	//fbi = info->par;
+	
+	int ret, format, hstride, vstride;				
+	/* DPC 1 is alreadfy set up by bootloader */	
+	/* 2nd DPC register set for TV out */
+	dpcregs += 0x400;
+	dpc_SetClockPClkMode(PCLKMODE_ONLYWHENCPUACCESS);
+	dpc_SetClock0(VID_VCLK_SOURCE_XTI,
+		      0, 	/* vidclk divider */ 
+		      0, 	/* vidclk delay */
+		      0, 	/* vidclk invert */	
+		      DISPLAY_VID_PRI_VCLK_OUT_ENB);
+	dpc_SetClock1(VID_VCLK_SOURCE_VCLK2, 
+		      1, 	/* vidclk2 divider */
+		      0,	/* outclk delay */
+		      0); 	/* outclk inv */
+	dpc_SetClockEnable(1);
+	ret = dpc_SetMode(VID_FORMAT_CCIR601B,
+			  1,  	/* interlace */
+			  0, 	/* invert field */
+			  0, 	/* RGB mode */
+			  0, 	/* swap RB */
+			  VID_ORDER_CbYCrY, /* YC order */
+			  1, 	/* clip YC */
+			  0,	/* embedded sync */
+			  DISPLAY_VID_PRI_PAD_VCLK);
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set display mode\n");
+	dpc_SetDither(DITHER_BYPASS, DITHER_BYPASS, DITHER_BYPASS);
+	ret = dpc_SetHSync(720, /* active horizontal */
+	  		   33, 	/* sync width */
+			   24, 	/* front porch */
+		  	   81, 	/* back porch */
+		  	   0); 	/* polarity */
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set HSync\n");
+	ret = dpc_SetVSync(240, /* active odd field */
+		  	   3, 	/* sync width */
+		  	   3, 	/* front porch */
+		  	   16, 	/* back porch */
+		  	   0, 	/* polarity */
+		  	   240, /* active even field */
+		  	   3, 	/* sync width */
+		  	   4, 	/* front porch */
+		  	   16); /* back porch */
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set VSync\n");
+	dpc_SetDelay(0, 4, 4, 4, 4, 4, 4);
+	dpc_SetVSyncOffset(0, 0, 0, 0);
+
+	/* Internal video encoder for TV out */
+	dpc_ResetEncoder();
+	dpc_SetEncoderEnable(1);
+	dpc_SetEncoderPowerDown(1);
+	dpc_SetEncoderMode(0, 1);
+	dpc_SetEncoderFSCAdjust(0);
+	dpc_SetEncoderBandwidth(0, 0);
+	dpc_SetEncoderColor(0, 0, 0, 0, 0);
+	dpc_SetEncoderTiming(64, 1716, 0, 3);
+	//dpc_SetEncoderUpscaler(320, 720);
+	dpc_SetEncoderUpscaler(info->var.xres, 720);
+	dpc_SetEncoderPowerDown(0);
+
+	/* 2nd DPC is master when running TV + LCD out */
+	dpc_SetDPCEnable();
+	dpc_SetClockEnable(1);
+
+	/* To support IOCTLS Switch back to 1st DPC register set for LCD out */
+	dpcregs -= 0x400;
+
+
+/* layer0 is already setup by bootloader */
+	//mlc_GetAddress(0, &addr);
+	mlc_GetFormat(0, &format);
+	hstride = mlc_GetHStride(0);
+	vstride = mlc_GetVStride(0);
+	//mlc_SetLayerEnable(0, true);
+	//mlc_SetDirtyFlag(0);
+	//mlc_SetBackground(0xFFFFFF);
+	//mlc_SetMLCEnable(1);
+	//mlc_SetTopDirtyFlag();
+	
+	/* 2nd MLC for 2nd DPC to TV out */
+	
+	mlcregs += 0x400;
+	mlc_SetClockMode(PCLKMODE_ONLYWHENCPUACCESS, BCLKMODE_DYNAMIC);
+	mlc_SetScreenSize(info->var.xres, info->var.yres);
+	ret = mlc_SetLayerPriority(DISPLAY_VID_LAYER_PRIORITY);
+	if(ret < 0)
+		printk(KERN_ALERT "mlc: failed to set layer priority %08X\n",
+			   DISPLAY_VID_LAYER_PRIORITY);
+	mlc_SetFieldEnable(0);
+	//for(i = 0; i < MLC_NUM_LAYERS; i++) {
+	//mlc_SetAddress(i, mlc_fb_addr+fboffset[i]);
+	//}
+	mlc_SetAddress(0, mlc_fb_addr);
+	mlc_SetFormat(0, format);
+	mlc_SetHStride(0, hstride);
+	mlc_SetVStride(0, vstride);
+	//mlc_SetPosition(0, 0, 0, X_RESOLUTION, Y_RESOLUTION);
+	mlc_SetPosition(0, 0, 0, info->var.xres, info->var.yres);
+	mlc_SetLayerEnable(0, true);
+	mlc_SetDirtyFlag(0);
+	mlc_SetBackground(0xFFFFFF);
+	mlc_SetMLCEnable(1);
+	mlc_SetTopDirtyFlag();
+	mlcregs -= 0x400;
+}
 
 
 
@@ -1888,47 +2028,54 @@ static void lf1000fb_set_par(struct lf1000fb_info *fbi)
 	set_mode(fbi);
 	u32 hstride;
 	u32 vstride;
+	
+	mlc_SetAddress(0, mlc_fb_addr); //TODO add loop to support other layers
 
 	mlc_SetLayerEnable(0, 1);
-	if (have_tvout()) {
-		memregs+= 0x400;
-		mlc_SetLayerEnable(0,1);
-		memregs -= 0x400;
-	}
+	//if (have_tvout()) {
+		//mlcregs+= 0x400;
+		//mlc_SetLayerEnable(0,1);
+		//mlcregs -= 0x400;
+	//}
 
 	mlc_SetFormat(0, fbi->pix_fmt);
-	if (have_tvout()) {
-		memregs+= 0x400;
-		mlc_SetFormat(0, fbi->pix_fmt);
-		memregs -= 0x400;
-	}
-	printk(KERN_INFO "lf1000fb: New MLC0 Mode: 0x%X\n", (ioread32(memregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
+	//if (have_tvout()) {
+		//mlcregs+= 0x400;
+		//mlc_SetFormat(0, fbi->pix_fmt);
+		//mlcregs -= 0x400;
+	//}
+	printk(KERN_INFO "lf1000fb: New MLC0 Mode: 0x%X\n", (ioread32(mlcregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
 
 
 	hstride = fbi->fb.var.bits_per_pixel/8;
 	mlc_SetHStride(0, hstride);
-	if (have_tvout()) {
-		memregs+= 0x400;
-		mlc_SetHStride(0, hstride);
-		memregs -= 0x400;
-	}
-	printk(KERN_INFO "lf1000fb: New MLC0 HStride: %d\n", (ioread32(memregs + MLCHSTRIDE0)));
+	//if (have_tvout()) {
+		//mlcregs+= 0x400;
+		//mlc_SetHStride(0, hstride);
+		//mlcregs -= 0x400;
+	//}
+	printk(KERN_INFO "lf1000fb: New MLC0 HStride: %d\n", (ioread32(mlcregs + MLCHSTRIDE0)));
 
 	vstride = hstride*fbi->fb.var.xres;
 	mlc_SetVStride(0, vstride);
-	if (have_tvout()) {
-		memregs += 0x400;
-		mlc_SetVStride(0, vstride);
-		memregs -= 0x400;
-	}
-	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(memregs + MLCVSTRIDE0)));
+	//if (have_tvout()) {
+		//mlcregs += 0x400;
+		//mlc_SetVStride(0, vstride);
+		//mlcregs -= 0x400;
+	//}
+	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(mlcregs + MLCVSTRIDE0)));
 
 	mlc_SetDirtyFlag(0);
+	//if (have_tvout()) {
+			//mlcregs += 0x400;
+			//mlc_SetDirtyFlag(0);
+			//mlcregs -= 0x400;
+	//};
+	
+	
 	if (have_tvout()) {
-			memregs += 0x400;
-			mlc_SetDirtyFlag(0);
-			memregs -= 0x400;
-	};
+		enable_tvout(fbi);
+	}
 }
 
 
@@ -1985,10 +2132,17 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 	/*Map MLC registers*/
 
 	
-	memregs = ioremap_nocache(res->start, (res->end - res->start+1));
-	if(!memregs) {
-		printk(KERN_INFO "lf1000fb: **************can't remap memory\n");
+	mlcregs = ioremap_nocache(res->start, (res->end - res->start+1));
+	if(!mlcregs) {
+		printk(KERN_INFO "lf1000fb: **************can't remap mlcregs\n");
 	}
+	
+	dpcregs = ioremap_nocache(0xC0003000, 0x1C9);
+	if(!dpcregs) {
+		printk(KERN_INFO "lf1000fb: **************can't remap dpcregs\n");
+	}
+	
+	
 	
 /* configure framebuffer fixed params */
 	printk(KERN_INFO "Configure Framebuffer fixed params\n");
