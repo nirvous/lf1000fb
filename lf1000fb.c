@@ -1833,16 +1833,39 @@ void dpc_SetEncoderUpscaler(u16 src, u16 dst)
 	iowrite16(((tmp & 0xFF) << 8) | 1,base+DPUPSCALECON0);
 }
 
-static void enable_tvout(struct fb_info *info)
-{	
-	//info->var.xres
-	printk(KERN_INFO "lf1000fb-TV-Out: source xres: %d\n", info->var.xres);
+static void enable_tvout_mlc(struct fb_info *info)
+{
+	int i, ret, format, hstride, vstride;	
 
-	//struct lf1000fb_info *fbi;
-	//fbi = info->par;
-	
-	int ret, format, hstride, vstride;				
-	/* DPC 1 is alreadfy set up by bootloader */	
+		/* 2nd MLC for 2nd DPC to TV out */
+	mlcregs += 0x400;
+	mlc_SetClockMode(PCLKMODE_ONLYWHENCPUACCESS, BCLKMODE_DYNAMIC);
+	mlc_SetScreenSize(info->var.xres, info->var.yres);
+	ret = mlc_SetLayerPriority(DISPLAY_VID_LAYER_PRIORITY);
+	if(ret < 0)
+		printk(KERN_ALERT "mlc: failed to set layer priority %08X\n",
+			   DISPLAY_VID_LAYER_PRIORITY);
+	mlc_SetFieldEnable(0);
+	for(i = 0; i < MLC_NUM_LAYERS; i++) {
+	//mlc_SetAddress(i, mlc_fb_addr+fboffset[i]);
+	mlc_SetAddress(i, mlc_fb_addr);
+	}
+	//mlc_SetAddress(0, mlc_fb_addr);
+	mlc_SetFormat(0, format);
+	mlc_SetHStride(0, hstride);
+	mlc_SetVStride(0, vstride);
+	//mlc_SetPosition(0, 0, 0, X_RESOLUTION, Y_RESOLUTION);
+	mlc_SetPosition(0, 0, 0, info->var.xres, info->var.yres);
+	mlc_SetLayerEnable(0, true);
+	mlc_SetDirtyFlag(0);
+	mlc_SetBackground(0xFFFFFF);
+	mlc_SetMLCEnable(1);
+	mlc_SetTopDirtyFlag();
+	mlcregs -= 0x400;
+}
+static void enable_tvout_dpc(struct fb_info *info)
+{	
+		int i, ret, format, hstride, vstride;	
 	/* 2nd DPC register set for TV out */
 	dpcregs += 0x400;
 	dpc_SetClockPClkMode(PCLKMODE_ONLYWHENCPUACCESS);
@@ -1908,44 +1931,6 @@ static void enable_tvout(struct fb_info *info)
 
 	/* To support IOCTLS Switch back to 1st DPC register set for LCD out */
 	dpcregs -= 0x400;
-
-
-/* layer0 is already setup by bootloader */
-	//mlc_GetAddress(0, &addr);
-	mlc_GetFormat(0, &format);
-	hstride = mlc_GetHStride(0);
-	vstride = mlc_GetVStride(0);
-	//mlc_SetLayerEnable(0, true);
-	//mlc_SetDirtyFlag(0);
-	//mlc_SetBackground(0xFFFFFF);
-	//mlc_SetMLCEnable(1);
-	//mlc_SetTopDirtyFlag();
-	
-	/* 2nd MLC for 2nd DPC to TV out */
-	
-	mlcregs += 0x400;
-	mlc_SetClockMode(PCLKMODE_ONLYWHENCPUACCESS, BCLKMODE_DYNAMIC);
-	mlc_SetScreenSize(info->var.xres, info->var.yres);
-	ret = mlc_SetLayerPriority(DISPLAY_VID_LAYER_PRIORITY);
-	if(ret < 0)
-		printk(KERN_ALERT "mlc: failed to set layer priority %08X\n",
-			   DISPLAY_VID_LAYER_PRIORITY);
-	mlc_SetFieldEnable(0);
-	//for(i = 0; i < MLC_NUM_LAYERS; i++) {
-	//mlc_SetAddress(i, mlc_fb_addr+fboffset[i]);
-	//}
-	mlc_SetAddress(0, mlc_fb_addr);
-	mlc_SetFormat(0, format);
-	mlc_SetHStride(0, hstride);
-	mlc_SetVStride(0, vstride);
-	//mlc_SetPosition(0, 0, 0, X_RESOLUTION, Y_RESOLUTION);
-	mlc_SetPosition(0, 0, 0, info->var.xres, info->var.yres);
-	mlc_SetLayerEnable(0, true);
-	mlc_SetDirtyFlag(0);
-	mlc_SetBackground(0xFFFFFF);
-	mlc_SetMLCEnable(1);
-	mlc_SetTopDirtyFlag();
-	mlcregs -= 0x400;
 }
 
 
@@ -2025,56 +2010,90 @@ static void set_mode(struct lf1000fb_info *fbi)
 
 static void lf1000fb_set_par(struct lf1000fb_info *fbi)
 {
+	int i, ret, div;
+	div = lf1000_CalcDivider(get_pll_freq(PLL1), DPC_DESIRED_CLOCK_HZ);
+	if(div < 0) {
+		printk(KERN_ERR "dpc: failed to get a clock divider!\n");
+		return -EFAULT;
+	}	
+	dpc_SetClockPClkMode(PCLKMODE_ONLYWHENCPUACCESS);
+	dpc_SetClock0(DISPLAY_VID_PRI_VCLK_SOURCE, 
+		      div > 0 ? (div-1) : 0, 
+		      DISPLAY_VID_PRI_VCLK_DELAY,
+		      DISPLAY_VID_PRI_VCLK_INV,	
+		      DISPLAY_VID_PRI_VCLK_OUT_ENB);
+	dpc_SetClock1(DISPLAY_VID_PRI_VCLK2_SOURCE,
+		      DISPLAY_VID_PRI_VCLK2_DIV,
+		      0,	/* outclk delay */
+		      1);	/* outclk inv */
+	dpc_SetClockEnable(1);
+	ret = dpc_SetMode(DISPLAY_VID_PRI_OUTPUT_FORMAT,
+			  0, 	/* interlace */
+			  0, 	/* invert field */
+			  1,	/* RGB mode */
+			  DISPLAY_VID_PRI_SWAP_RGB,
+			  DISPLAY_VID_PRI_OUTORDER,
+			  0,	/* clip YC */
+			  0,	/* embedded sync */
+			  DISPLAY_VID_PRI_PAD_VCLK);
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set display mode\n");
+	dpc_SetDither(DITHER_BYPASS, DITHER_BYPASS, DITHER_BYPASS);
+	ret = dpc_SetHSync(DISPLAY_VID_PRI_MAX_X_RESOLUTION,
+	  		   DISPLAY_VID_PRI_HSYNC_SWIDTH,
+			   DISPLAY_VID_PRI_HSYNC_FRONT_PORCH,
+		  	   DISPLAY_VID_PRI_HSYNC_BACK_PORCH,
+		  	   DISPLAY_VID_PRI_HSYNC_ACTIVEHIGH );
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set HSync\n");
+	ret = dpc_SetVSync(DISPLAY_VID_PRI_MAX_Y_RESOLUTION,
+		  	   DISPLAY_VID_PRI_VSYNC_SWIDTH,
+		  	   DISPLAY_VID_PRI_VSYNC_FRONT_PORCH,
+		  	   DISPLAY_VID_PRI_VSYNC_BACK_PORCH,
+		  	   DISPLAY_VID_PRI_VSYNC_ACTIVEHIGH,
+		  	   1, 1, 1, 1);
+	if(ret < 0)
+		printk(KERN_ALERT "dpc: failed to set VSync\n");
+
+	dpc_SetDelay(0, 7, 7, 7, 4, 4, 4);
+	dpc_SetVSyncOffset(1, 1, 1, 1);
+	
+	dpc_SetDPCEnable();
+	//END DPC PRI SETUP	
+	if (have_tvout()) {
+		enable_tvout_dpc(fbi);
+	}
+	
+	//MLC PRI SETUP
+	mlc_SetClockMode(PCLKMODE_ONLYWHENCPUACCESS, BCLKMODE_DYNAMIC);
+	mlc_SetScreenSize(fbi->fb.var.xres, fbi->fb.var.yres);
+	ret = mlc_SetLayerPriority(DISPLAY_VID_LAYER_PRIORITY);
+	if(ret < 0)
+		printk(KERN_ALERT "mlc: failed to set layer priority %08X\n",
+			   DISPLAY_VID_LAYER_PRIORITY);
+	mlc_SetFieldEnable(0);
+	for(i = 0; i < MLC_NUM_LAYERS; i++) {
+	//mlc_SetAddress(i, mlc_fb_addr+fboffset[i]);
+	mlc_SetAddress(i, mlc_fb_addr);
+	}
 	set_mode(fbi);
 	u32 hstride;
 	u32 vstride;
-	
-	mlc_SetAddress(0, mlc_fb_addr); //TODO add loop to support other layers
-
-	mlc_SetLayerEnable(0, 1);
-	//if (have_tvout()) {
-		//mlcregs+= 0x400;
-		//mlc_SetLayerEnable(0,1);
-		//mlcregs -= 0x400;
-	//}
-
 	mlc_SetFormat(0, fbi->pix_fmt);
-	//if (have_tvout()) {
-		//mlcregs+= 0x400;
-		//mlc_SetFormat(0, fbi->pix_fmt);
-		//mlcregs -= 0x400;
-	//}
 	printk(KERN_INFO "lf1000fb: New MLC0 Mode: 0x%X\n", (ioread32(mlcregs+MLCCONTROL0)>>FORMAT) & 0xFFFF);
-
-
 	hstride = fbi->fb.var.bits_per_pixel/8;
 	mlc_SetHStride(0, hstride);
-	//if (have_tvout()) {
-		//mlcregs+= 0x400;
-		//mlc_SetHStride(0, hstride);
-		//mlcregs -= 0x400;
-	//}
 	printk(KERN_INFO "lf1000fb: New MLC0 HStride: %d\n", (ioread32(mlcregs + MLCHSTRIDE0)));
-
 	vstride = hstride*fbi->fb.var.xres;
 	mlc_SetVStride(0, vstride);
-	//if (have_tvout()) {
-		//mlcregs += 0x400;
-		//mlc_SetVStride(0, vstride);
-		//mlcregs -= 0x400;
-	//}
 	printk(KERN_INFO "lf1000fb: New VStride: %d\n", (ioread32(mlcregs + MLCVSTRIDE0)));
-
+	mlc_SetLayerEnable(0, true);	
 	mlc_SetDirtyFlag(0);
-	//if (have_tvout()) {
-			//mlcregs += 0x400;
-			//mlc_SetDirtyFlag(0);
-			//mlcregs -= 0x400;
-	//};
-	
-	
+	mlc_SetBackground(0xFFFFFF);
+	mlc_SetMLCEnable(1);
+	mlc_SetTopDirtyFlag();
 	if (have_tvout()) {
-		enable_tvout(fbi);
+		enable_tvout_mlc(fbi);
 	}
 }
 
@@ -2132,7 +2151,8 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 	/*Map MLC registers*/
 
 	
-	mlcregs = ioremap_nocache(res->start, (res->end - res->start+1));
+	//mlcregs = ioremap_nocache(res->start, (res->end - res->start+1));
+	mlcregs = ioremap_nocache(0xC0004000, 0x3C9);
 	if(!mlcregs) {
 		printk(KERN_INFO "lf1000fb: **************can't remap mlcregs\n");
 	}
