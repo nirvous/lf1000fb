@@ -38,7 +38,14 @@
 #include <mach/mlc.h>
 
 #include "lf1000fb.h"
+
 //#define DUAL_DISPLAY			1
+
+#ifdef DUAL_DISPLAY		
+#define TVOUT_ENABLE			1
+#else
+#define TVOUT_ENABLE			0
+#endif
 
 /* fixed framebuffer settings */
 static struct fb_fix_screeninfo lf1000fb_fix __initdata = {
@@ -147,21 +154,22 @@ static int lf1000fb_setcolreg(unsigned regno,
 
 
 
-int have_tvout(void)
-{
-#ifdef DUAL_DISPLAY		
-	return(1);
-#else
-	return(0);
-#endif
-}
+//int have_tvout(void)
+//{
+//#ifdef DUAL_DISPLAY		
+	//return(1);
+//#else
+
+	//return(0);
+//#endif
+//}
 
 //int mlc_layer_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,unsigned long arg)
 //static int pollux_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 
 static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 {
-
+	int tvout_enable = info->var.reserved[0];
 	int result = 0;
 	void __user *argp = (void __user *)arg;
 	union mlc_cmd c;
@@ -189,7 +197,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTENABLE:
 		mlc_SetMLCEnable(arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			mlc_SetMLCEnable(arg);
 			mlcregs -= 0x400;
@@ -202,7 +210,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTBACKGND:
 		mlc_SetBackground(arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			mlc_SetBackground(arg);
 			mlcregs -= 0x400;
@@ -215,7 +223,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTPRIORITY:
 		result = mlc_SetLayerPriority(arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetLayerPriority(arg);
 			mlcregs -= 0x400;
@@ -224,7 +232,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTTOPDIRTY:
 		mlc_SetTopDirtyFlag();
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			mlc_SetTopDirtyFlag();
 			mlcregs -= 0x400;
@@ -238,7 +246,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 			return -EFAULT;
 		result = mlc_SetScreenSize(c.screensize.width,
 					   c.screensize.height);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetScreenSize(c.screensize.width,
 						   c.screensize.height);
@@ -256,7 +264,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTLAYEREN:
 		result = mlc_SetLayerEnable(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs+= 0x400;
 			result = mlc_SetLayerEnable(layerID, arg);
 			mlcregs -= 0x400;
@@ -265,7 +273,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTADDRESS:
 		result = mlc_SetAddress(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetAddress(layerID, arg);
 			mlcregs -= 0x400;
@@ -274,7 +282,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTHSTRIDE:
 		result = mlc_SetHStride(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs+= 0x400;
 			result = mlc_SetHStride(layerID, arg);
 			mlcregs -= 0x400;
@@ -283,7 +291,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTVSTRIDE:
 		result = mlc_SetVStride(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetVStride(layerID, arg);
 			mlcregs -= 0x400;
@@ -296,7 +304,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTLOCKSIZE:
 		result = mlc_SetLockSize(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetLockSize(layerID, arg);
 			mlcregs -= 0x400;
@@ -320,7 +328,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 					 c.position.left,
 					 c.position.right,
 					 c.position.bottom);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetPosition(layerID,
 						 c.position.top,
@@ -345,7 +353,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTFORMAT:
 		result = mlc_SetFormat(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetFormat(layerID, arg);
 			mlcregs -= 0x400;
@@ -359,7 +367,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCT3DENB:
 		result = mlc_Set3DEnable(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_Set3DEnable(layerID, arg);
 			mlcregs -= 0x400;
@@ -376,7 +384,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTALPHA:
 		result = mlc_SetTransparencyAlpha(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetTransparencyAlpha(layerID, arg);
 			mlcregs -= 0x400;
@@ -389,7 +397,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTTPCOLOR:
 		result = mlc_SetTransparencyColor(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetTransparencyColor(layerID, arg);
 			mlcregs -= 0x400;
@@ -405,7 +413,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTBLEND:
 		result = mlc_SetBlendEnable(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetBlendEnable(layerID, arg);
 			mlcregs -= 0x400;
@@ -419,7 +427,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTTRANSP:
 		result = mlc_SetTransparencyEnable(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetTransparencyEnable(layerID, arg);
 			mlcregs -= 0x400;
@@ -433,7 +441,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTINVERT:
 		result = mlc_SetInvertEnable(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetInvertEnable(layerID, arg);
 			mlcregs -= 0x400;
@@ -447,7 +455,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTINVCOLOR:
 		result = mlc_SetInvertColor(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetInvertColor(layerID, arg);
 			mlcregs -= 0x400;
@@ -469,7 +477,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 					    c.overlaysize.srcheight,
 					    c.overlaysize.dstwidth,
 					    c.overlaysize.dstheight);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetOverlaySize(layerID,
 						    c.overlaysize.srcwidth,
@@ -528,7 +536,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTADDRESSCB:
 		result = mlc_SetAddressCb(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetAddressCb(layerID, arg);
 			mlcregs -= 0x400;
@@ -539,7 +547,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		
 		case MLC_IOCTADDRESSCR:
 		result = mlc_SetAddressCr(layerID, arg);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetAddressCr(layerID, arg);
 			mlcregs -= 0x400;
@@ -549,7 +557,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCTDIRTY:
 		result = mlc_SetDirtyFlag(layerID);
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_SetDirtyFlag(layerID);
 			mlcregs -= 0x400;
@@ -558,7 +566,7 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 
 		case MLC_IOCQDIRTY:
 		/* query 2nd MLC for proper sync on TV + LCD out */
-		if (have_tvout()) {
+		if (tvout_enable) {
 			mlcregs += 0x400;
 			result = mlc_GetDirtyFlag(layerID);
 			mlcregs -= 0x400;
@@ -594,7 +602,22 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		result = mlc_fb_size;
 		break;
 		
-
+		case FBIO_ENABLE_TVOUT:
+		if (info->var.reserved[0]==1)
+			return -EFAULT;
+		info->var.reserved[0]=1;
+		enable_tvout_dpc(info);
+		enable_tvout_mlc(info);
+		break;
+		
+		case FBIO_DISABLE_TVOUT:
+		if (info->var.reserved[0]==0)
+			return -EFAULT;
+		info->var.reserved[0]=0;
+		disable_tvout();
+		break;
+		
+		
 
 		default:
 		return -ENOTTY;
@@ -1580,12 +1603,22 @@ void dpc_SetClockEnable(u8 en)
 	iowrite32(tmp,base+DPCCLKENB);
 }
 
-void dpc_SetDPCEnable(void)
+//void dpc_SetDPCEnable(void)
+//{
+	//void *base = dpcregs;
+	//u16 tmp = ioread16(base+DPCCTRL0);
+
+	//BIT_SET(tmp,DPCENB);
+	//BIT_CLR(tmp,_INTENB); /* disable VSYNC interrupt */
+	//iowrite16(tmp,base+DPCCTRL0);
+//}
+
+void dpc_SetDPCEnable(u8 en)
 {
 	void *base = dpcregs;
 	u16 tmp = ioread16(base+DPCCTRL0);
 
-	BIT_SET(tmp,DPCENB);
+	en ? BIT_SET(tmp,DPCENB):BIT_CLR(tmp,DPCENB);
 	BIT_CLR(tmp,_INTENB); /* disable VSYNC interrupt */
 	iowrite16(tmp,base+DPCCTRL0);
 }
@@ -1966,14 +1999,28 @@ static void enable_tvout_dpc(struct fb_info *info)
 	dpc_SetEncoderPowerDown(0);
 
 	/* 2nd DPC is master when running TV + LCD out */
-	dpc_SetDPCEnable();
+	dpc_SetDPCEnable(1);
 	dpc_SetClockEnable(1);
 
 	/* To support IOCTLS Switch back to 1st DPC register set for LCD out */
 	dpcregs -= 0x400;
 }
 
-
+static void disable_tvout()
+{
+	mlcregs += 0x400;
+	mlc_SetLayerEnable(0, false);
+	mlc_SetDirtyFlag(0);
+	mlc_SetMLCEnable(0);
+	mlc_SetTopDirtyFlag();
+	mlcregs -= 0x400;
+	dpcregs += 0x400;
+	dpc_SetEncoderPowerDown(1);
+	dpc_SetEncoderEnable(0);
+	dpc_SetClockEnable(0); // CLKENB : Provides internal operating clock.
+	dpc_SetDPCEnable(0);
+	dpcregs -= 0x400;
+}
 
 
 static void set_mode(struct lf1000fb_info *fbi)
@@ -2050,6 +2097,7 @@ static void set_mode(struct lf1000fb_info *fbi)
 
 static void lf1000fb_set_par(struct lf1000fb_info *fbi)
 {
+	int tvout_enable = fbi->fb.var.reserved[0];
 	int i, ret, div;
 	div = lf1000_CalcDivider(get_pll_freq(PLL1), DPC_DESIRED_CLOCK_HZ);
 	if(div < 0) {
@@ -2098,9 +2146,9 @@ static void lf1000fb_set_par(struct lf1000fb_info *fbi)
 	dpc_SetDelay(0, 7, 7, 7, 4, 4, 4);
 	dpc_SetVSyncOffset(1, 1, 1, 1);
 	
-	dpc_SetDPCEnable();
+	dpc_SetDPCEnable(1);
 	//END DPC PRI SETUP	
-	if (have_tvout()) {
+	if (tvout_enable) {
 		enable_tvout_dpc(fbi);
 	}
 	
@@ -2132,7 +2180,7 @@ static void lf1000fb_set_par(struct lf1000fb_info *fbi)
 	mlc_SetBackground(0xFFFFFF);
 	mlc_SetMLCEnable(1);
 	mlc_SetTopDirtyFlag();
-	if (have_tvout()) {
+	if (tvout_enable) {
 		enable_tvout_mlc(fbi);
 	}
 }
@@ -2210,6 +2258,10 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 
 
 	fbi->fb.var.bits_per_pixel=BITSPP;
+	fbi->fb.var.reserved[0]=TVOUT_ENABLE; 
+
+	
+	
 	//Do check var here
 
 	/*Set Mode*/

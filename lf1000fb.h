@@ -342,6 +342,8 @@ int mlc_GetAddressCr(u8 layer, int *addr);
 #define MLC_IOCTADDRESSCR	_IO(MLC_IOC_MAGIC,  39)
 #define MLC_IOCQADDRESSCR	_IO(MLC_IOC_MAGIC,  46) //PATCH
 
+#define FBIO_ENABLE_TVOUT	_IO(MLC_IOC_MAGIC,  48) //PATCH
+#define FBIO_DISABLE_TVOUT	_IO(MLC_IOC_MAGIC,  49) //PATCH
 
 
 
@@ -550,3 +552,8 @@ struct lf1000fb_info {
 };
 static void *mlcregs;
 static void *dpcregs;
+
+static void enable_tvout_dpc(struct fb_info *info);
+static void enable_tvout_mlc(struct fb_info *info);
+static void disable_tvout();
+
