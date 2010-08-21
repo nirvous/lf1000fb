@@ -301,6 +301,8 @@ int mlc_GetAddressCr(u8 layer, int *addr);
 
 	
 #define MLC_IOCTLOCKSIZE	_IO(MLC_IOC_MAGIC,  12)
+#define MLC_IOCQLOCKSIZE	_IO(MLC_IOC_MAGIC,  47) //PATCH
+
 #define MLC_IOCSPOSITION	_IOW(MLC_IOC_MAGIC, 13, struct position_cmd *)
 #define MLC_IOCGPOSITION	_IOR(MLC_IOC_MAGIC, 14, struct position_cmd *)
 #define MLC_IOCTFORMAT		_IO(MLC_IOC_MAGIC,  15)
@@ -339,6 +341,10 @@ int mlc_GetAddressCr(u8 layer, int *addr);
 
 #define MLC_IOCTADDRESSCR	_IO(MLC_IOC_MAGIC,  39)
 #define MLC_IOCQADDRESSCR	_IO(MLC_IOC_MAGIC,  46) //PATCH
+
+
+
+
 
 /*
  * 

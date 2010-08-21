@@ -303,6 +303,11 @@ static int lf1000fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 		}
 		break;
 
+		case MLC_IOCQLOCKSIZE:
+		if(mlc_GetLockSize(layerID, &result) < 0);
+			return -EFAULT;
+		break;
+
 
 		case MLC_IOCSPOSITION:
 		if(!(_IOC_DIR(cmd) & _IOC_WRITE))
@@ -612,6 +617,9 @@ void mlc_SetMLCEnable(u8 en)
 		iowrite32(tmp, mlcregs+MLCCONTROLT);
 		BIT_SET(tmp,PIXELBUFFER_SLD); 	/* disable sleep */
 		iowrite32(tmp, mlcregs+MLCCONTROLT);
+		BIT_SET(tmp,MLCENB);		/* enable */
+		iowrite32(tmp, mlcregs+MLCCONTROLT);
+		BIT_SET(tmp,DITTYFLAG);
 	}
 	else {
 		BIT_CLR(tmp,MLCENB);		/* disable */
@@ -836,6 +844,20 @@ int mlc_SetLockSize(u8 layer, u32 locksize)
 	tmp &= ~(3<<LOCKSIZE);
 	tmp |= ((locksize/8)<<LOCKSIZE);
 	iowrite32(tmp,reg);
+	return 0;
+}
+
+int mlc_GetLockSize(u8 layer, int *locksize) /*Orignal code had this comment: FIXME*/
+{
+	u32 tmp;
+	void *reg;
+
+	if(layer == MLC_VIDEO_LAYER || layer > MLC_NUM_LAYERS)
+		return -EINVAL;
+
+	reg = SelectLayerControl(layer);
+	tmp = ioread32(reg);
+	*locksize = ((tmp & (3<<LOCKSIZE))>>LOCKSIZE)*8;
 	return 0;
 }
 
@@ -1835,8 +1857,12 @@ void dpc_SetEncoderUpscaler(u16 src, u16 dst)
 
 static void enable_tvout_mlc(struct fb_info *info)
 {
-	int i, ret, format, hstride, vstride;	
-
+	int i, ret, format, hstride, vstride, locksize;	
+	
+	mlc_GetFormat(0, &format);
+	mlc_GetLockSize(0, &locksize);
+	hstride = mlc_GetHStride(0);
+	vstride = mlc_GetVStride(0);
 		/* 2nd MLC for 2nd DPC to TV out */
 	mlcregs += 0x400;
 	mlc_SetClockMode(PCLKMODE_ONLYWHENCPUACCESS, BCLKMODE_DYNAMIC);
@@ -1846,21 +1872,35 @@ static void enable_tvout_mlc(struct fb_info *info)
 		printk(KERN_ALERT "mlc: failed to set layer priority %08X\n",
 			   DISPLAY_VID_LAYER_PRIORITY);
 	mlc_SetFieldEnable(0);
+//printk(KERN_INFO "lf1000fb-TVOut: setting addresses\n");
 	for(i = 0; i < MLC_NUM_LAYERS; i++) {
 	//mlc_SetAddress(i, mlc_fb_addr+fboffset[i]);
 	mlc_SetAddress(i, mlc_fb_addr);
+//printk(KERN_INFO "lf1000fb-TVOut: setting addresses: layer: %d address %x\n", i, mlc_fb_addr);
 	}
+//msleep(4000);
 	//mlc_SetAddress(0, mlc_fb_addr);
+//printk(KERN_INFO "lf1000fb-TVOut: set format to: %x\n", format);
 	mlc_SetFormat(0, format);
+//msleep(4000);
+	mlc_SetLockSize(0, locksize);
+//printk(KERN_INFO "lf1000fb-TVOut: set locksize to: %d\n", locksize);
+//msleep(4000);
+//printk(KERN_INFO "lf1000fb-TVOut: setting hstride\n");
 	mlc_SetHStride(0, hstride);
+//printk(KERN_INFO "lf1000fb-TVOut: setting vstride\n");
 	mlc_SetVStride(0, vstride);
 	//mlc_SetPosition(0, 0, 0, X_RESOLUTION, Y_RESOLUTION);
 	mlc_SetPosition(0, 0, 0, info->var.xres, info->var.yres);
 	mlc_SetLayerEnable(0, true);
 	mlc_SetDirtyFlag(0);
+//printk(KERN_INFO "lf1000fb-TVOut: layer 0 dirtyflag set \n");
+//msleep(4000);
 	mlc_SetBackground(0xFFFFFF);
 	mlc_SetMLCEnable(1);
 	mlc_SetTopDirtyFlag();
+//printk(KERN_INFO "lf1000fb-TVOut: top dirtyflag set \n");
+//msleep(4000);
 	mlcregs -= 0x400;
 }
 static void enable_tvout_dpc(struct fb_info *info)
