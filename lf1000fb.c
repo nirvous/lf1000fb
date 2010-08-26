@@ -39,7 +39,10 @@
 
 #include "lf1000fb.h"
 
-//#define DUAL_DISPLAY			1
+
+#ifdef  CONFIG_LF1000_DPC_DUAL_DISPLAY
+#define DUAL_DISPLAY			1
+#endif
 
 #ifdef DUAL_DISPLAY		
 #define TVOUT_ENABLE			1
